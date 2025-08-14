@@ -2,8 +2,9 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery } from '@/lib/supabaseAdmin'
+import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
+import { createHash } from 'crypto'
 
 // Validate that the response is properly grounded in the provided context
 function validateResponseGrounding(response: string, sources: any[], query: string) {
@@ -164,56 +165,94 @@ export async function POST(req: Request) {
     console.log(`🧪 [${requestId}] Query length:`, query.length)
     console.log(`🧪 [${requestId}] Type filter enabled:`, !!type)
 
-    // Step 1: Embed query
-    console.log(`🔄 [${requestId}] Creating embedding for query...`)
-    const embedStartTime = Date.now()
-    let embedRes
-    try {
-      embedRes = await openai.embeddings.create({
-        input: query,
-        model: EMBED_MODEL,
-        dimensions: EMBEDDING_DIMENSIONS, // Must match Supabase vector schema
-      })
-      embeddingDuration = Date.now() - embedStartTime
-      console.log(`✅ [${requestId}] Embedding created in ${embeddingDuration}ms`)
-    } catch (error) {
-      embeddingDuration = Date.now() - embedStartTime
-      console.error(`❌ [${requestId}] OpenAI embedding failed:`, {
-        error: error.message,
-        code: error.code,
-        type: error.type,
-        model: EMBED_MODEL,
-        queryLength: query.length,
-        duration: embeddingDuration
-      })
-      
-      errorMessage = `Failed to create embedding: ${error.message}`
-      status = 'error'
-      
-      // Log the error
-      await logChatQuery({
-        requestId,
-        query,
-        queryType,
-        errorMessage,
-        status,
-        embeddingDuration,
-        totalDuration: Date.now() - startTime
-      })
-      
-      return NextResponse.json(
-        { 
-          error: 'Failed to create embedding', 
-          details: error.message,
-          model: EMBED_MODEL,
-          requestId,
-          timestamp: new Date().toISOString()
-        },
-        { status: 500 }
-      )
-    }
+    // Step 1: Check for cached embedding or create new one
+    const normalizedQuery = query.trim().toLowerCase()
+    const queryHash = createHash('sha256').update(normalizedQuery).digest('hex')
+    console.log(`🔍 [${requestId}] Query hash: ${queryHash.slice(0, 8)}...`)
 
-    const queryEmbedding = embedRes.data[0].embedding
+    let queryEmbedding: number[]
+    const embedStartTime = Date.now()
+    
+    // Try to get cached embedding first
+    console.log(`🔄 [${requestId}] Checking for cached embedding...`)
+    const cachedEmbedding = await getQueryEmbedding(queryHash)
+    
+    if (cachedEmbedding && cachedEmbedding.model_name === EMBED_MODEL) {
+      console.log(`✅ [${requestId}] Using cached embedding (used ${cachedEmbedding.usage_count} times)`)
+      queryEmbedding = cachedEmbedding.embedding
+      embeddingDuration = Date.now() - embedStartTime
+      
+      // Find and log similar queries for analytics
+      const similarQueries = await findSimilarQueries(queryEmbedding, 0.9, 3)
+      if (similarQueries.length > 0) {
+        console.log(`🔍 [${requestId}] Found ${similarQueries.length} similar queries:`, 
+          similarQueries.map(q => ({ 
+            text: q.query_text.slice(0, 50) + '...', 
+            similarity: q.similarity.toFixed(3),
+            usage: q.usage_count 
+          }))
+        )
+      }
+    } else {
+      console.log(`🔄 [${requestId}] Creating new embedding...`)
+      let embedRes
+      try {
+        embedRes = await openai.embeddings.create({
+          input: query,
+          model: EMBED_MODEL,
+          dimensions: EMBEDDING_DIMENSIONS, // Must match Supabase vector schema
+        })
+        embeddingDuration = Date.now() - embedStartTime
+        console.log(`✅ [${requestId}] Embedding created in ${embeddingDuration}ms`)
+        
+        queryEmbedding = embedRes.data[0].embedding
+        
+        // Cache the new embedding for future use
+        await saveQueryEmbedding({
+          queryText: query,
+          queryHash,
+          embedding: queryEmbedding,
+          modelName: EMBED_MODEL,
+          embeddingDimensions: EMBEDDING_DIMENSIONS
+        })
+        
+      } catch (error) {
+        embeddingDuration = Date.now() - embedStartTime
+        console.error(`❌ [${requestId}] OpenAI embedding failed:`, {
+          error: error.message,
+          code: error.code,
+          type: error.type,
+          model: EMBED_MODEL,
+          queryLength: query.length,
+          duration: embeddingDuration
+        })
+        
+        errorMessage = `Failed to create embedding: ${error.message}`
+        status = 'error'
+        
+        // Log the error
+        await logChatQuery({
+          requestId,
+          query,
+          queryType,
+          errorMessage,
+          status,
+          embeddingDuration,
+          totalDuration: Date.now() - startTime
+        })
+        
+        return NextResponse.json(
+          { 
+            error: 'Failed to create embedding', 
+            details: error.message,
+            model: EMBED_MODEL,
+            requestId,
+            timestamp: new Date().toISOString()
+          },
+          { status: 500 }
+        )
+      }
+    }
     console.log(`🧪 [${requestId}] Embedding dimensions:`, queryEmbedding.length)
     console.log(`🧪 [${requestId}] Embedding sample (first 5):`, queryEmbedding.slice(0, 5).map(v => v.toFixed(4)))
     console.log(`🧪 [${requestId}] Embedding sample (middle 5):`, queryEmbedding.slice(250, 255).map(v => v.toFixed(4)))
