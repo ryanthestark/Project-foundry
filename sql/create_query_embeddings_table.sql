@@ -1,14 +1,6 @@
 -- Enable pgvector extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Verify vector type is available
-DO $vector_check$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
-        RAISE EXCEPTION 'pgvector extension not properly installed';
-    END IF;
-END $vector_check$;
-
 -- Create query_embeddings table for storing and caching query embeddings
 CREATE TABLE IF NOT EXISTS query_embeddings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
