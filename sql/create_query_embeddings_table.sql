@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS query_embeddings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   query_text TEXT NOT NULL,
   query_hash TEXT NOT NULL UNIQUE, -- SHA-256 hash of normalized query for deduplication
-  embedding VECTOR(512) NOT NULL, -- Must match EMBEDDING_DIMENSIONS
+  embedding vector(512) NOT NULL, -- Must match EMBEDDING_DIMENSIONS
   model_name TEXT NOT NULL, -- e.g., 'text-embedding-3-small'
   embedding_dimensions INTEGER NOT NULL DEFAULT 512,
   query_length INTEGER NOT NULL,
@@ -26,7 +26,7 @@ WITH (lists = 100);
 
 -- Function to find similar queries
 CREATE OR REPLACE FUNCTION find_similar_queries(
-  query_embedding VECTOR(512),
+  query_embedding vector(512),
   similarity_threshold FLOAT DEFAULT 0.8,
   match_count INTEGER DEFAULT 10
 )
