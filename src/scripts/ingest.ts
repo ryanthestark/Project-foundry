@@ -84,6 +84,20 @@ async function main() {
     // Validate environment
     await validateEnvironment()
     
+    // Check if embeddings table exists and clear it if requested
+    const { data: existingData, error: checkError } = await supabaseAdmin
+      .from('embeddings')
+      .select('count(*)')
+      .limit(1)
+    
+    if (checkError) {
+      console.error('❌ Could not check embeddings table:', checkError.message)
+      console.log('💡 Make sure to run the SQL setup scripts first:')
+      console.log('   1. sql/create_embeddings_table.sql')
+      console.log('   2. sql/match_embeddings_function.sql')
+      throw new Error('Database not ready for ingestion')
+    }
+    
     const dir = path.join(process.cwd(), 'docs')
     console.log(`📁 Reading directory: ${dir}`)
     
@@ -94,12 +108,18 @@ async function main() {
       throw new Error(`Failed to read docs directory: ${error.message}`)
     }
     
-    console.log(`📄 Found ${files.length} files to process`)
+    // Filter for text files only
+    const textFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase()
+      return ['.md', '.txt', '.json'].includes(ext) || !ext
+    })
+    
+    console.log(`📄 Found ${files.length} total files, ${textFiles.length} text files to process`)
     
     let successCount = 0
     let errorCount = 0
     
-    for (const file of files) {
+    for (const file of textFiles) {
       const fullPath = path.join(dir, file)
       
       // Check if it's a file (not directory)
@@ -118,13 +138,38 @@ async function main() {
       try {
         await ingestFile(fullPath)
         successCount++
+        
+        // Add small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
       } catch (error) {
         console.error(`❌ Failed to ingest ${file}:`, error.message)
         errorCount++
       }
     }
 
-    console.log(`🎉 Ingestion complete! Success: ${successCount}, Errors: ${errorCount}`)
+    console.log(`\n🎉 Ingestion complete!`)
+    console.log(`✅ Success: ${successCount}`)
+    console.log(`❌ Errors: ${errorCount}`)
+    console.log(`📊 Total records in database:`)
+    
+    // Show final stats
+    const { data: finalCount } = await supabaseAdmin
+      .from('embeddings')
+      .select('metadata')
+    
+    if (finalCount) {
+      const typeStats = finalCount.reduce((acc, record) => {
+        const type = record.metadata?.type || 'unknown'
+        acc[type] = (acc[type] || 0) + 1
+        return acc
+      }, {})
+      
+      Object.entries(typeStats).forEach(([type, count]) => {
+        console.log(`   ${type}: ${count} records`)
+      })
+    }
+    
   } catch (error) {
     console.error("❌ Ingestion process failed:", error.message)
     process.exit(1)
