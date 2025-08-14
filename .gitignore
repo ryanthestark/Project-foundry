@@ -4,4 +4,4 @@ node_modules/
 dist/
 venv/
 .env*
-.aider*
+.aider*venv/
