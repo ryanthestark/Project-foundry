@@ -297,6 +297,102 @@ export async function getTopResponses(limitCount: number = 10, minGroundingScore
   }
 }
 
+// Utility functions for timestamp logging and analysis
+export async function logTimestamp(timestampData: {
+  entityType: string
+  entityId: string
+  createdAt: Date | string
+  sourceTable?: string
+  metadata?: any
+  timezone?: string
+  createdBy?: string
+  sessionId?: string
+}) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('timestamps')
+      .insert({
+        entity_type: timestampData.entityType,
+        entity_id: timestampData.entityId,
+        created_at: timestampData.createdAt,
+        source_table: timestampData.sourceTable || null,
+        metadata: timestampData.metadata || null,
+        timezone: timestampData.timezone || 'UTC',
+        created_by: timestampData.createdBy || null,
+        session_id: timestampData.sessionId || null
+      })
+
+    if (error) {
+      console.error('Failed to log timestamp:', error)
+      return false
+    }
+
+    console.log(`✅ Timestamp logged: ${timestampData.entityType}:${timestampData.entityId}`)
+    return true
+  } catch (error) {
+    console.error('Exception while logging timestamp:', error)
+    return false
+  }
+}
+
+export async function getTimestampStats(entityType?: string, daysBack: number = 30) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_timestamp_stats', {
+      entity_type_param: entityType || null,
+      days_back: daysBack
+    })
+
+    if (error) {
+      console.error('Failed to get timestamp stats:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Exception while getting timestamp stats:', error)
+    return []
+  }
+}
+
+export async function getCreationTimeline(entityType?: string, hoursBack: number = 24, bucketHours: number = 1) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_creation_timeline', {
+      entity_type_param: entityType || null,
+      hours_back: hoursBack,
+      bucket_hours: bucketHours
+    })
+
+    if (error) {
+      console.error('Failed to get creation timeline:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Exception while getting creation timeline:', error)
+    return []
+  }
+}
+
+export async function getRecentActivity(limitCount: number = 50, entityTypeFilter?: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_recent_activity', {
+      limit_count: limitCount,
+      entity_type_filter: entityTypeFilter || null
+    })
+
+    if (error) {
+      console.error('Failed to get recent activity:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Exception while getting recent activity:', error)
+    return []
+  }
+}
+
 // Utility function for logging RAG chat queries
 export async function logChatQuery(logData: {
   requestId: string

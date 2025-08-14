@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse } from '@/lib/supabaseAdmin'
+import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 import { createHash } from 'crypto'
 
@@ -626,6 +626,65 @@ Instructions: Answer the question using ONLY the information provided in the con
         wasUsedInResponse: true // All matches in final response were used
       }))
     })
+
+    // Log timestamps for all entities created in this request
+    const requestTimestamp = new Date(startTime)
+    
+    await logTimestamp({
+      entityType: 'chat_query',
+      entityId: requestId,
+      createdAt: requestTimestamp,
+      sourceTable: 'chat_logs',
+      sessionId: requestId,
+      metadata: {
+        queryType,
+        queryLength: query.length,
+        matchCount: matches.length,
+        groundingScore: groundingValidation.score
+      }
+    })
+
+    await logTimestamp({
+      entityType: 'query_embedding',
+      entityId: queryHash,
+      createdAt: requestTimestamp,
+      sourceTable: 'query_embeddings',
+      sessionId: requestId,
+      metadata: {
+        model: EMBED_MODEL,
+        dimensions: EMBEDDING_DIMENSIONS,
+        cached: !!cachedEmbedding
+      }
+    })
+
+    await logTimestamp({
+      entityType: 'response',
+      entityId: requestId,
+      createdAt: new Date(startTime + embeddingDuration + searchDuration + chatDuration),
+      sourceTable: 'responses',
+      sessionId: requestId,
+      metadata: {
+        model: CHAT_MODEL,
+        groundingScore: groundingValidation.score,
+        wordCount: (generatedResponse.match(/\S+/g) || []).length
+      }
+    })
+
+    // Log timestamps for each match
+    for (let i = 0; i < matches.length; i++) {
+      await logTimestamp({
+        entityType: 'match',
+        entityId: `${requestId}_match_${i + 1}`,
+        createdAt: new Date(startTime + embeddingDuration + searchDuration),
+        sourceTable: 'matches',
+        sessionId: requestId,
+        metadata: {
+          similarity: matches[i].similarity,
+          rankPosition: i + 1,
+          source: matches[i].source
+        }
+      })
+    }
 
     // Log successful completion
     await logChatQuery({
