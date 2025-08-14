@@ -59,7 +59,7 @@ DECLARE
   readability FLOAT;
 BEGIN
   -- Count words (simple split on whitespace)
-  words := array_length(string_to_array(trim(response_text_param), ' '), 1);
+  words := COALESCE(array_length(string_to_array(trim(response_text_param), ' '), 1), 0);
   
   -- Count sentences (simple count of sentence endings)
   sentences := (length(response_text_param) - length(replace(replace(replace(response_text_param, '.', ''), '!', ''), '?', '')));
@@ -73,7 +73,7 @@ BEGIN
   avg_length := words::FLOAT / sentences::FLOAT;
   
   -- Simple readability score (inverse of average sentence length, normalized)
-  readability := GREATEST(0, LEAST(100, 100 - (avg_length - 10) * 2));
+  readability := GREATEST(0.0, LEAST(100.0, 100.0 - (avg_length - 10.0) * 2.0));
   
   RETURN QUERY SELECT words, sentences, avg_length, readability;
 END;
