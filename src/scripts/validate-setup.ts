@@ -132,7 +132,7 @@ async function validateSupabase() {
     }
     
     // Test RPC function with proper vector format
-    const testEmbedding = new Array(512).fill(0.1)
+    const testEmbedding = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testEmbedding.join(',')}]`
     const { data: rpcData, error: rpcError } = await supabaseAdmin
       .rpc('match_embeddings', {

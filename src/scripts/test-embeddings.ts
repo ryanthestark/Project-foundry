@@ -1,7 +1,7 @@
 // Test embedding generation specifically
 
 import 'dotenv/config'
-import { openai, EMBED_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '../lib/openai'
 
 async function testEmbeddingGeneration() {
   console.log('🧪 Testing Embedding Generation...\n')
@@ -42,26 +42,14 @@ async function testEmbeddingGeneration() {
       const response = await openai.embeddings.create({
         input: testCase.text,
         model: EMBED_MODEL,
-        dimensions: 512
+        dimensions: EMBEDDING_DIMENSIONS
       })
       
       const duration = Date.now() - startTime
       const embedding = response.data[0].embedding
       
-      // Validate embedding
-      if (!embedding || !Array.isArray(embedding)) {
-        throw new Error('Embedding is not an array')
-      }
-      
-      if (embedding.length !== testCase.expectedLength) {
-        throw new Error(`Expected ${testCase.expectedLength} dimensions, got ${embedding.length}`)
-      }
-      
-      // Check if embedding contains valid numbers
-      const invalidValues = embedding.filter(val => typeof val !== 'number' || isNaN(val))
-      if (invalidValues.length > 0) {
-        throw new Error(`Found ${invalidValues.length} invalid values in embedding`)
-      }
+      // Validate embedding dimensions match Supabase schema
+      validateEmbeddingDimensions(embedding)
       
       // Check embedding magnitude (should be normalized for cosine similarity)
       const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
@@ -95,7 +83,7 @@ async function testEmbeddingGeneration() {
     const batchResponse = await openai.embeddings.create({
       input: batchTexts,
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     const duration = Date.now() - startTime
     
@@ -105,7 +93,7 @@ async function testEmbeddingGeneration() {
     
     console.log(`✅ Batch embedding success!`)
     console.log(`   📊 Batch size: ${batchTexts.length}`)
-    console.log(`   📈 All dimensions: ${batchResponse.data.every(d => d.embedding.length === 512)}`)
+    console.log(`   📈 All dimensions: ${batchResponse.data.every(d => d.embedding.length === EMBEDDING_DIMENSIONS)}`)
     console.log(`   ⏱️ Total duration: ${duration}ms`)
     console.log(`   ⚡ Avg per embedding: ${Math.round(duration / batchTexts.length)}ms`)
     console.log()
@@ -124,7 +112,7 @@ async function testEmbeddingGeneration() {
         openai.embeddings.create({
           input: `Rapid test ${i}`,
           model: EMBED_MODEL,
-          dimensions: 512
+          dimensions: EMBEDDING_DIMENSIONS
         })
       )
     }
@@ -135,7 +123,7 @@ async function testEmbeddingGeneration() {
     
     console.log(`✅ Rate limiting test passed!`)
     console.log(`   🚀 Concurrent requests: ${rapidRequests.length}`)
-    console.log(`   ✅ All successful: ${results.every(r => r.data[0].embedding.length === 512)}`)
+    console.log(`   ✅ All successful: ${results.every(r => r.data[0].embedding.length === EMBEDDING_DIMENSIONS)}`)
     console.log(`   ⏱️ Total duration: ${duration}ms`)
     console.log()
     
@@ -152,7 +140,7 @@ async function testEmbeddingGeneration() {
     console.log('🎉 All embedding tests passed!')
     console.log('\n📋 Key findings:')
     console.log(`   • Model: ${EMBED_MODEL}`)
-    console.log('   • Dimensions: 512 (compatible with vector(512))')
+    console.log(`   • Dimensions: ${EMBEDDING_DIMENSIONS} (compatible with vector(${EMBEDDING_DIMENSIONS}))`)
     console.log('   • Handles various text lengths and content types')
     console.log('   • Embeddings are properly normalized')
     console.log('   • Batch processing works correctly')

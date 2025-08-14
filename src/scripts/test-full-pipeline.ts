@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
-import { openai, EMBED_MODEL, CHAT_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS } from '../lib/openai'
 
 async function testFullPipeline() {
   console.log('🚀 Starting Full RAG Pipeline Test\n')
@@ -28,7 +28,7 @@ async function testFullPipeline() {
     const embedTest = await openai.embeddings.create({
       input: 'test embedding',
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     
     const chatTest = await openai.chat.completions.create({
@@ -70,7 +70,7 @@ async function testFullPipeline() {
   // Test 4: Vector Similarity Function
   console.log('4️⃣ Testing Vector Similarity Function...')
   try {
-    const testVector = new Array(512).fill(0.1)
+    const testVector = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testVector.join(',')}]`
     const { data: rpcResult, error: rpcError } = await supabaseAdmin
       .rpc('match_embeddings', {

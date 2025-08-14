@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
-import { openai, EMBED_MODEL, CHAT_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS } from '../lib/openai'
 
 async function validateFullRAGFlow() {
   console.log('🚀 COMPREHENSIVE RAG PIPELINE VALIDATION\n')
@@ -48,7 +48,7 @@ async function validateFullRAGFlow() {
     const testEmbed = await openai.embeddings.create({
       input: 'test connection',
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     console.log(`✅ OpenAI Embeddings API: Connected (${EMBED_MODEL})`)
     
@@ -93,14 +93,14 @@ async function validateFullRAGFlow() {
       const response = await openai.embeddings.create({
         input: text,
         model: EMBED_MODEL,
-        dimensions: 512
+        dimensions: EMBEDDING_DIMENSIONS
       })
       
       const embedding = response.data[0].embedding
       
       // Validate embedding properties
-      if (!Array.isArray(embedding) || embedding.length !== 512) {
-        throw new Error(`Invalid embedding for test ${index + 1}: expected 512D array`)
+      if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSIONS) {
+        throw new Error(`Invalid embedding for test ${index + 1}: expected ${EMBEDDING_DIMENSIONS}D array`)
       }
       
       const invalidValues = embedding.filter(val => typeof val !== 'number' || isNaN(val))
@@ -109,18 +109,18 @@ async function validateFullRAGFlow() {
       }
       
       const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
-      console.log(`✅ Test ${index + 1}: ${text.length} chars → 512D embedding (magnitude: ${magnitude.toFixed(4)})`)
+      console.log(`✅ Test ${index + 1}: ${text.length} chars → ${EMBEDDING_DIMENSIONS}D embedding (magnitude: ${magnitude.toFixed(4)})`)
     }
     
     // Test batch embedding
     const batchResponse = await openai.embeddings.create({
       input: ['First doc', 'Second doc', 'Third doc'],
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     
-    if (batchResponse.data.length !== 3) {
-      throw new Error('Batch embedding failed')
+    if (batchResponse.data.length !== 3 || !batchResponse.data.every(d => d.embedding.length === EMBEDDING_DIMENSIONS)) {
+      throw new Error('Batch embedding failed - incorrect dimensions or count')
     }
     console.log('✅ Batch embedding: 3 documents processed successfully')
     
@@ -160,7 +160,7 @@ async function validateFullRAGFlow() {
     const embedResponse = await openai.embeddings.create({
       input: testQuery,
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     
     const queryEmbedding = embedResponse.data[0].embedding

@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
-import { openai, EMBED_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '../lib/openai'
 
 async function testVectorMatch() {
   console.log('🧪 Testing Supabase RPC Vector Match...\n')
@@ -12,7 +12,7 @@ async function testVectorMatch() {
   // Test 1: Basic RPC function existence
   console.log('1️⃣ Testing RPC Function Existence...')
   try {
-    const testVector = new Array(512).fill(0.1)
+    const testVector = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testVector.join(',')}]`
     const { data, error } = await supabaseAdmin
       .rpc('match_embeddings', {
@@ -69,11 +69,15 @@ async function testVectorMatch() {
     const embedResponse = await openai.embeddings.create({
       input: testQuery,
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     
     const queryEmbedding = embedResponse.data[0].embedding
     console.log(`✅ Created embedding: ${queryEmbedding.length} dimensions`)
+    
+    // Validate embedding dimensions
+    validateEmbeddingDimensions(queryEmbedding)
+    console.log(`✅ Embedding validation passed`)
     
     // Test RPC with real embedding
     const vectorString = `[${queryEmbedding.join(',')}]`
@@ -118,7 +122,7 @@ async function testVectorMatch() {
   // Test 4: Test type filtering
   console.log('4️⃣ Testing Type Filtering...')
   try {
-    const testVector = new Array(512).fill(0.1)
+    const testVector = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testVector.join(',')}]`
     
     // Test without filter
@@ -172,7 +176,7 @@ async function testVectorMatch() {
   // Test 5: Test similarity thresholds
   console.log('5️⃣ Testing Similarity Thresholds...')
   try {
-    const testVector = new Array(512).fill(0.1)
+    const testVector = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testVector.join(',')}]`
     
     const thresholds = [0.0, 0.3, 0.5, 0.8]
@@ -211,7 +215,7 @@ async function testVectorMatch() {
   // Test 6: Test edge cases
   console.log('6️⃣ Testing Edge Cases...')
   try {
-    const testVector = new Array(512).fill(0.1)
+    const testVector = new Array(EMBEDDING_DIMENSIONS).fill(0.1)
     const testVectorString = `[${testVector.join(',')}]`
     
     // Test with match_count = 0
