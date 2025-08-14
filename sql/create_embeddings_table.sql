@@ -1,3 +1,6 @@
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Create embeddings table for RAG pipeline
 CREATE TABLE IF NOT EXISTS embeddings (
   id bigserial PRIMARY KEY,
