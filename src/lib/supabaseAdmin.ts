@@ -97,7 +97,7 @@ export async function findSimilarQueries(embedding: number[], threshold: number 
   }
 }
 
-// Lightweight matches logging
+// Lightweight matches logging as JSONB
 export async function logMatches(matchesData: {
   requestId: string
   queryHash: string
@@ -112,29 +112,44 @@ export async function logMatches(matchesData: {
     // Only log top 5 matches to keep it lightweight
     const topMatches = matchesData.matches.slice(0, 5)
     
-    const matchRecords = topMatches.map((match, index) => ({
-      request_id: matchesData.requestId,
-      query_hash: matchesData.queryHash,
-      embedding_id: match.embeddingId || null,
-      source: match.source,
-      content: `[Match ${index + 1}]`, // Don't store full content
-      similarity: Math.round(match.similarity * 1000) / 1000, // Round to 3 decimals
-      rank_position: match.rankPosition || index + 1,
-      metadata: { rank: index + 1 }, // Minimal metadata
-      content_length: 0, // Don't calculate content length
-      was_used_in_response: true
-    }))
+    // Calculate summary statistics
+    const similarities = topMatches.map(m => m.similarity)
+    const avgSimilarity = similarities.length > 0 ? similarities.reduce((a, b) => a + b, 0) / similarities.length : 0
+    const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 0
+    const minSimilarity = similarities.length > 0 ? Math.min(...similarities) : 0
+    
+    // Prepare JSONB data
+    const matchesJsonb = {
+      match_count: topMatches.length,
+      avg_similarity: Math.round(avgSimilarity * 1000) / 1000,
+      max_similarity: Math.round(maxSimilarity * 1000) / 1000,
+      min_similarity: Math.round(minSimilarity * 1000) / 1000,
+      sources: topMatches.map((match, index) => ({
+        embedding_id: match.embeddingId || null,
+        source: match.source,
+        similarity: Math.round(match.similarity * 1000) / 1000,
+        rank: match.rankPosition || index + 1
+      })),
+      metadata: {
+        lightweight: true,
+        timestamp: new Date().toISOString()
+      }
+    }
 
     const { error } = await supabaseAdmin
       .from('matches')
-      .insert(matchRecords)
+      .insert({
+        request_id: matchesData.requestId,
+        query_hash: matchesData.queryHash,
+        matches_data: matchesJsonb
+      })
 
     if (error) {
       console.error('Failed to log matches:', error)
       return false
     }
 
-    console.log(`✅ Logged ${matchRecords.length} lightweight matches for request: ${matchesData.requestId}`)
+    console.log(`✅ Logged ${topMatches.length} lightweight matches as JSONB for request: ${matchesData.requestId}`)
     return true
   } catch (error) {
     console.error('Exception while logging matches:', error)

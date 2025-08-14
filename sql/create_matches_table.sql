@@ -6,30 +6,19 @@ CREATE TABLE IF NOT EXISTS matches (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   request_id TEXT NOT NULL, -- Links to chat_logs table
   query_hash TEXT NOT NULL, -- Links to query_embeddings table
-  embedding_id UUID NOT NULL, -- ID from embeddings table that matched
-  source TEXT NOT NULL, -- Source document name
-  content TEXT NOT NULL, -- Matched content chunk
-  similarity FLOAT NOT NULL, -- Cosine similarity score
-  rank_position INTEGER NOT NULL, -- Position in search results (1, 2, 3...)
-  metadata JSONB, -- Document metadata (type, etc.)
-  content_length INTEGER NOT NULL,
-  was_used_in_response BOOLEAN DEFAULT false, -- Whether this match influenced the final response
+  matches_data JSONB NOT NULL, -- All match data stored as JSONB
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes for efficient queries
 CREATE INDEX IF NOT EXISTS idx_matches_request_id ON matches(request_id);
 CREATE INDEX IF NOT EXISTS idx_matches_query_hash ON matches(query_hash);
-CREATE INDEX IF NOT EXISTS idx_matches_embedding_id ON matches(embedding_id);
-CREATE INDEX IF NOT EXISTS idx_matches_similarity ON matches(similarity DESC);
-CREATE INDEX IF NOT EXISTS idx_matches_rank_position ON matches(rank_position);
-CREATE INDEX IF NOT EXISTS idx_matches_source ON matches(source);
 CREATE INDEX IF NOT EXISTS idx_matches_created_at ON matches(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_matches_was_used ON matches(was_used_in_response);
 
--- Create composite indexes for common query patterns
-CREATE INDEX IF NOT EXISTS idx_matches_request_similarity ON matches(request_id, similarity DESC);
-CREATE INDEX IF NOT EXISTS idx_matches_query_rank ON matches(query_hash, rank_position);
+-- Create JSONB indexes for efficient queries on match data
+CREATE INDEX IF NOT EXISTS idx_matches_data_gin ON matches USING gin(matches_data);
+CREATE INDEX IF NOT EXISTS idx_matches_similarity ON matches USING btree(((matches_data->>'avg_similarity')::float) DESC);
+CREATE INDEX IF NOT EXISTS idx_matches_count ON matches USING btree(((matches_data->>'match_count')::integer) DESC);
 
 -- Function to get match statistics for a request
 CREATE OR REPLACE FUNCTION get_match_stats(request_id_param TEXT)
@@ -46,14 +35,15 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    COALESCE(COUNT(*), 0)::INTEGER as total_matches,
-    COALESCE(AVG(m.similarity), 0)::FLOAT as avg_similarity,
-    COALESCE(MAX(m.similarity), 0)::FLOAT as max_similarity,
-    COALESCE(MIN(m.similarity), 0)::FLOAT as min_similarity,
-    COALESCE(COUNT(DISTINCT m.source), 0)::INTEGER as unique_sources,
-    COALESCE(COUNT(CASE WHEN m.was_used_in_response THEN 1 END), 0)::INTEGER as matches_used
+    COALESCE((m.matches_data->>'match_count')::INTEGER, 0) as total_matches,
+    COALESCE((m.matches_data->>'avg_similarity')::FLOAT, 0.0) as avg_similarity,
+    COALESCE((m.matches_data->>'max_similarity')::FLOAT, 0.0) as max_similarity,
+    COALESCE((m.matches_data->>'min_similarity')::FLOAT, 0.0) as min_similarity,
+    COALESCE(jsonb_array_length(m.matches_data->'sources'), 0) as unique_sources,
+    COALESCE((m.matches_data->>'match_count')::INTEGER, 0) as matches_used
   FROM matches m
-  WHERE m.request_id = request_id_param;
+  WHERE m.request_id = request_id_param
+  LIMIT 1;
 END;
 $$;
 
@@ -73,13 +63,14 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    m.source,
+    source_elem->>'source' as source,
     COUNT(*)::INTEGER as match_count,
-    AVG(m.similarity)::FLOAT as avg_similarity,
-    COUNT(CASE WHEN m.was_used_in_response THEN 1 END)::INTEGER as times_used
-  FROM matches m
+    AVG((source_elem->>'similarity')::FLOAT)::FLOAT as avg_similarity,
+    COUNT(*)::INTEGER as times_used
+  FROM matches m,
+       jsonb_array_elements(m.matches_data->'sources') as source_elem
   WHERE m.created_at >= NOW() - (days_back * INTERVAL '1 day')
-  GROUP BY m.source
+  GROUP BY source_elem->>'source'
   ORDER BY match_count DESC, avg_similarity DESC
   LIMIT limit_count;
 END;
