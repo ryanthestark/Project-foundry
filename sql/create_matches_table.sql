@@ -33,6 +33,12 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- Check if any matches exist for this request
+  IF NOT EXISTS (SELECT 1 FROM matches WHERE request_id = request_id_param) THEN
+    RETURN QUERY SELECT 0, 0.0, 0.0, 0.0, 0, 0;
+    RETURN;
+  END IF;
+
   RETURN QUERY
   SELECT 
     COALESCE((m.matches_data->>'match_count')::INTEGER, 0) as total_matches,
@@ -70,6 +76,8 @@ BEGIN
   FROM matches m,
        jsonb_array_elements(m.matches_data->'sources') as source_elem
   WHERE m.created_at >= NOW() - (days_back * INTERVAL '1 day')
+    AND m.matches_data ? 'sources'
+    AND jsonb_typeof(m.matches_data->'sources') = 'array'
   GROUP BY source_elem->>'source'
   ORDER BY match_count DESC, avg_similarity DESC
   LIMIT limit_count;
