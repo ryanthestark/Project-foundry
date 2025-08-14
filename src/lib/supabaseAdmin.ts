@@ -383,7 +383,7 @@ export async function getRecentActivity(limitCount: number = 50, entityTypeFilte
   }
 }
 
-// Lightweight RAG request logging
+// Unified RAG logging to single table
 export async function logRAGRequest(ragData: {
   requestId: string
   query: string
@@ -401,10 +401,14 @@ export async function logRAGRequest(ragData: {
     rank: number
   }>
   response?: {
+    text?: string
     model: string
     duration: number
     groundingScore: number
     length: number
+    hasSourceReferences?: boolean
+    hasDirectQuotes?: boolean
+    sourcesCited?: number
   }
   performance: {
     embeddingDuration: number
@@ -414,53 +418,86 @@ export async function logRAGRequest(ragData: {
   }
   status: 'success' | 'error' | 'partial'
   errorMessage?: string
+  sessionId?: string
 }) {
   try {
-    console.log(`📊 [${ragData.requestId}] Logging lightweight RAG request...`)
+    console.log(`📊 [${ragData.requestId}] Logging unified RAG request...`)
     
-    // Log the main request entry with minimal metadata
-    const { error: requestError } = await supabaseAdmin
-      .from('rag_requests')
+    // Prepare matches data as JSONB
+    let matchesJsonb = null
+    if (ragData.matches && ragData.matches.length > 0) {
+      const similarities = ragData.matches.map(m => m.similarity)
+      matchesJsonb = {
+        match_count: ragData.matches.length,
+        avg_similarity: similarities.reduce((a, b) => a + b, 0) / similarities.length,
+        max_similarity: Math.max(...similarities),
+        min_similarity: Math.min(...similarities),
+        sources: ragData.matches.slice(0, 5).map(match => ({
+          source: match.source,
+          similarity: Math.round(match.similarity * 1000) / 1000,
+          rank: match.rank
+        }))
+      }
+    }
+    
+    // Log to unified rag_logs table
+    const { error: logError } = await supabaseAdmin
+      .from('rag_logs')
       .insert({
         request_id: ragData.requestId,
-        query: ragData.query.slice(0, 1000), // Truncate long queries
+        query: ragData.query.slice(0, 2000), // Truncate long queries
         query_type: ragData.queryType || null,
         query_hash: ragData.queryHash,
+        
+        // Embedding data
         embedding_model: ragData.embedding?.model || null,
         embedding_dimensions: ragData.embedding?.dimensions || null,
         embedding_cached: ragData.embedding?.cached || false,
+        embedding_duration_ms: ragData.performance.embeddingDuration,
+        
+        // Search/match data
         match_count: ragData.matches?.length || 0,
+        matches_data: matchesJsonb,
+        search_duration_ms: ragData.performance.searchDuration,
+        
+        // Response data
+        response_text: ragData.response?.text?.slice(0, 3000) || null, // Truncate long responses
         response_model: ragData.response?.model || null,
         response_length: ragData.response?.length || 0,
+        response_duration_ms: ragData.performance.chatDuration,
         grounding_score: ragData.response?.groundingScore || null,
-        embedding_duration_ms: ragData.performance.embeddingDuration,
-        search_duration_ms: ragData.performance.searchDuration,
-        chat_duration_ms: ragData.performance.chatDuration,
+        has_source_references: ragData.response?.hasSourceReferences || false,
+        has_direct_quotes: ragData.response?.hasDirectQuotes || false,
+        sources_cited: ragData.response?.sourcesCited || 0,
+        
+        // Performance and status
         total_duration_ms: ragData.performance.totalDuration,
         status: ragData.status,
-        error_message: ragData.errorMessage?.slice(0, 500) || null, // Truncate long errors
+        error_message: ragData.errorMessage?.slice(0, 1000) || null,
+        
+        // Metadata
+        session_id: ragData.sessionId || null,
         metadata: {
+          lightweight: true,
           embedding_cached: ragData.embedding?.cached || false,
-          match_sources: ragData.matches?.slice(0, 3).map(m => m.source) || [], // Only top 3 sources
-          avg_similarity: ragData.matches?.length ? 
-            ragData.matches.reduce((sum, m) => sum + m.similarity, 0) / ragData.matches.length : 0
+          timestamp: new Date().toISOString()
         }
       })
 
-    if (requestError) {
-      console.error('Failed to log RAG request:', requestError)
+    if (logError) {
+      console.error('Failed to log unified RAG request:', logError)
       return false
     }
 
-    console.log(`✅ [${ragData.requestId}] RAG request logged successfully`)
+    console.log(`✅ [${ragData.requestId}] Unified RAG request logged successfully`)
     return true
   } catch (error) {
-    console.error('Exception while logging RAG request:', error)
+    console.error('Exception while logging unified RAG request:', error)
     return false
   }
 }
 
-// Utility function for logging RAG chat queries
+// Legacy function - now redirects to unified logging
 export async function logChatQuery(logData: {
   requestId: string
   query: string
@@ -477,34 +514,27 @@ export async function logChatQuery(logData: {
   errorMessage?: string
   status?: 'success' | 'error' | 'partial'
 }) {
-  try {
-    const { error } = await supabaseAdmin
-      .from('chat_logs')
-      .insert({
-        request_id: logData.requestId,
-        query: logData.query,
-        query_type: logData.queryType || null,
-        response: logData.response || null,
-        sources: logData.sources || null,
-        metadata: logData.metadata || null,
-        embedding_duration_ms: logData.embeddingDuration || null,
-        search_duration_ms: logData.searchDuration || null,
-        chat_duration_ms: logData.chatDuration || null,
-        total_duration_ms: logData.totalDuration || null,
-        match_count: logData.matchCount || null,
-        grounding_score: logData.groundingScore || null,
-        error_message: logData.errorMessage || null,
-        status: logData.status || 'success'
-      })
-
-    if (error) {
-      console.error('Failed to log chat query:', error)
-      // Don't throw - logging failures shouldn't break the main flow
-    } else {
-      console.log(`✅ Chat query logged successfully: ${logData.requestId}`)
-    }
-  } catch (error) {
-    console.error('Exception while logging chat query:', error)
-    // Don't throw - logging failures shouldn't break the main flow
-  }
+  // Redirect to unified logging
+  return logRAGRequest({
+    requestId: logData.requestId,
+    query: logData.query,
+    queryType: logData.queryType,
+    queryHash: 'legacy', // Use placeholder for legacy calls
+    performance: {
+      embeddingDuration: logData.embeddingDuration || 0,
+      searchDuration: logData.searchDuration || 0,
+      chatDuration: logData.chatDuration || 0,
+      totalDuration: logData.totalDuration || 0
+    },
+    response: logData.response ? {
+      text: logData.response,
+      model: 'unknown',
+      duration: logData.chatDuration || 0,
+      groundingScore: logData.groundingScore || 0,
+      length: logData.response.length,
+      sourcesCited: logData.matchCount || 0
+    } : undefined,
+    status: logData.status || 'success',
+    errorMessage: logData.errorMessage
+  })
 }

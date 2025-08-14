@@ -669,7 +669,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       console.error(`⚠️ [${requestId}] Failed to log timestamp, but continuing:`, logError)
     }
 
-    // Log lightweight RAG request data using supabaseAdmin (non-blocking)
+    // Log unified RAG request data using supabaseAdmin (non-blocking)
     try {
       await logRAGRequest({
         requestId,
@@ -682,16 +682,20 @@ Instructions: Answer the question using ONLY the information provided in the con
           duration: embeddingDuration,
           cached: !!cachedEmbedding
         },
-        matches: matches.slice(0, 3).map((match: any, index: number) => ({
+        matches: matches.slice(0, 5).map((match: any, index: number) => ({
           source: match.source,
           similarity: match.similarity,
           rank: index + 1
         })),
         response: {
+          text: generatedResponse,
           model: CHAT_MODEL,
           duration: chatDuration,
           groundingScore: groundingValidation.score,
-          length: generatedResponse.length
+          length: generatedResponse.length,
+          hasSourceReferences: groundingValidation.hasSourceReferences,
+          hasDirectQuotes: groundingValidation.hasDirectQuotes,
+          sourcesCited: matches.length
         },
         performance: {
           embeddingDuration,
@@ -699,10 +703,11 @@ Instructions: Answer the question using ONLY the information provided in the con
           chatDuration,
           totalDuration
         },
-        status: 'success'
+        status: 'success',
+        sessionId: requestId
       })
     } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log lightweight RAG request, but continuing:`, logError)
+      console.error(`⚠️ [${requestId}] Failed to log unified RAG request, but continuing:`, logError)
     }
 
     // Log successful completion using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
@@ -740,7 +745,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       timestamp: new Date().toISOString()
     })
     
-    // Log lightweight RAG request error using supabaseAdmin (non-blocking)
+    // Log unified RAG request error using supabaseAdmin (non-blocking)
     try {
       await logRAGRequest({
         requestId,
@@ -754,10 +759,11 @@ Instructions: Answer the question using ONLY the information provided in the con
           totalDuration
         },
         status: 'error',
-        errorMessage: error.message
+        errorMessage: error.message,
+        sessionId: requestId
       })
     } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log lightweight RAG error, but continuing:`, logError)
+      console.error(`⚠️ [${requestId}] Failed to log unified RAG error, but continuing:`, logError)
     }
 
     // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
