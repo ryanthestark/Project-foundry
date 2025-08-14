@@ -112,15 +112,19 @@ export async function POST(req: Request) {
       errorMessage = 'Query parameter is required and must be a string'
       status = 'error'
       
-      // Log the error using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query: query || '[invalid]',
-        queryType,
-        errorMessage,
-        status,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the error using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query: query || '[invalid]',
+          queryType,
+          errorMessage,
+          status,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+      }
       
       return NextResponse.json(
         { 
@@ -139,15 +143,19 @@ export async function POST(req: Request) {
       errorMessage = `Query is too long (max 10000 characters): ${query.length}`
       status = 'error'
       
-      // Log the error using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query: query.slice(0, 1000) + '...[truncated]',
-        queryType,
-        errorMessage,
-        status,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the error using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query: query.slice(0, 1000) + '...[truncated]',
+          queryType,
+          errorMessage,
+          status,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+      }
       
       return NextResponse.json(
         { 
@@ -207,14 +215,18 @@ export async function POST(req: Request) {
         
         queryEmbedding = embedRes.data[0].embedding
         
-        // Cache the new embedding for future use
-        await saveQueryEmbedding({
-          queryText: query,
-          queryHash,
-          embedding: queryEmbedding,
-          modelName: EMBED_MODEL,
-          embeddingDimensions: EMBEDDING_DIMENSIONS
-        })
+        // Cache the new embedding for future use (non-blocking)
+        try {
+          await saveQueryEmbedding({
+            queryText: query,
+            queryHash,
+            embedding: queryEmbedding,
+            modelName: EMBED_MODEL,
+            embeddingDimensions: EMBEDDING_DIMENSIONS
+          })
+        } catch (cacheError) {
+          console.error(`⚠️ [${requestId}] Failed to cache embedding, but continuing:`, cacheError)
+        }
         
       } catch (error) {
         embeddingDuration = Date.now() - embedStartTime
@@ -230,16 +242,20 @@ export async function POST(req: Request) {
         errorMessage = `Failed to create embedding: ${error.message}`
         status = 'error'
         
-        // Log the error using supabaseAdmin
-        await logChatQuery({
-          requestId,
-          query,
-          queryType,
-          errorMessage,
-          status,
-          embeddingDuration,
-          totalDuration: Date.now() - startTime
-        })
+        // Log the error using supabaseAdmin (non-blocking)
+        try {
+          await logChatQuery({
+            requestId,
+            query,
+            queryType,
+            errorMessage,
+            status,
+            embeddingDuration,
+            totalDuration: Date.now() - startTime
+          })
+        } catch (logError) {
+          console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+        }
         
         return NextResponse.json(
           { 
@@ -269,16 +285,20 @@ export async function POST(req: Request) {
       errorMessage = `Embedding validation failed: ${error.message}`
       status = 'error'
       
-      // Log the error using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query,
-        queryType,
-        errorMessage,
-        status,
-        embeddingDuration,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the error using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query,
+          queryType,
+          errorMessage,
+          status,
+          embeddingDuration,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+      }
       
       return NextResponse.json(
         { 
@@ -361,17 +381,21 @@ export async function POST(req: Request) {
       errorMessage = `Supabase match_embeddings failed: ${error.message}`
       status = 'error'
       
-      // Log the error using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query,
-        queryType,
-        errorMessage,
-        status,
-        embeddingDuration,
-        searchDuration,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the error using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query,
+          queryType,
+          errorMessage,
+          status,
+          embeddingDuration,
+          searchDuration,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+      }
       
       return NextResponse.json(
         { 
@@ -433,19 +457,23 @@ export async function POST(req: Request) {
       const noMatchResponse = "I couldn't find any relevant information in the knowledge base for your query."
       status = 'partial'
       
-      // Log the partial result using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query,
-        queryType,
-        response: noMatchResponse,
-        sources: [],
-        embeddingDuration,
-        searchDuration,
-        matchCount: 0,
-        status,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the partial result using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query,
+          queryType,
+          response: noMatchResponse,
+          sources: [],
+          embeddingDuration,
+          searchDuration,
+          matchCount: 0,
+          status,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log partial result, but continuing:`, logError)
+      }
       
       return NextResponse.json({
         response: noMatchResponse,
@@ -520,24 +548,28 @@ Instructions: Answer the question using ONLY the information provided in the con
       errorMessage = `Failed to generate response: ${error.message}`
       status = 'error'
       
-      // Log the error using supabaseAdmin
-      await logChatQuery({
-        requestId,
-        query,
-        queryType,
-        sources: matches.map((m: any) => ({
-          source: m.source || 'unknown',
-          similarity: m.similarity || 0,
-          type: m.metadata?.type || m.type || 'unknown'
-        })),
-        errorMessage,
-        status,
-        embeddingDuration,
-        searchDuration,
-        chatDuration,
-        matchCount: matches.length,
-        totalDuration: Date.now() - startTime
-      })
+      // Log the error using supabaseAdmin (non-blocking)
+      try {
+        await logChatQuery({
+          requestId,
+          query,
+          queryType,
+          sources: matches.map((m: any) => ({
+            source: m.source || 'unknown',
+            similarity: m.similarity || 0,
+            type: m.metadata?.type || m.type || 'unknown'
+          })),
+          errorMessage,
+          status,
+          embeddingDuration,
+          searchDuration,
+          chatDuration,
+          matchCount: matches.length,
+          totalDuration: Date.now() - startTime
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
+      }
       
       return NextResponse.json(
         { 
@@ -591,159 +623,191 @@ Instructions: Answer the question using ONLY the information provided in the con
     // Count direct quotes in response
     const directQuotesCount = (generatedResponse.match(/["'].*?["']/g) || []).length
 
-    // Log response for analysis using supabaseAdmin
-    await logResponse({
-      requestId,
-      queryHash,
-      responseText: generatedResponse,
-      modelName: CHAT_MODEL,
-      temperature: 0.7,
-      maxTokens: 1000,
-      groundingScore: groundingValidation.score,
-      hasSourceReferences: groundingValidation.hasSourceReferences,
-      hasDirectQuotes: groundingValidation.hasDirectQuotes,
-      acknowledgesLimitations: groundingValidation.acknowledgesLimitations,
-      avoidsUngroundedClaims: groundingValidation.avoidsUngroundedClaims,
-      sourcesCited: matches.length,
-      directQuotesCount,
-      metadata: {
-        grounding: groundingValidation,
-        model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
-      }
-    })
-
-    // Log matches for analysis using supabaseAdmin
-    await logMatches({
-      requestId,
-      queryHash,
-      matches: matches.map((match: any, index: number) => ({
-        embeddingId: match.id,
-        source: match.source,
-        content: match.content,
-        similarity: match.similarity,
-        rankPosition: index + 1,
-        metadata: match.metadata,
-        wasUsedInResponse: true // All matches in final response were used
-      }))
-    })
-
-    // Log timestamps for all entities created in this request using supabaseAdmin
-    const requestTimestamp = new Date(startTime)
-    
-    await logTimestamp({
-      entityType: 'chat_query',
-      entityId: requestId,
-      createdAt: requestTimestamp,
-      sourceTable: 'chat_logs',
-      sessionId: requestId,
-      metadata: {
-        queryType,
-        queryLength: query.length,
-        matchCount: matches.length,
-        groundingScore: groundingValidation.score
-      }
-    })
-
-    await logTimestamp({
-      entityType: 'query_embedding',
-      entityId: queryHash,
-      createdAt: requestTimestamp,
-      sourceTable: 'query_embeddings',
-      sessionId: requestId,
-      metadata: {
-        model: EMBED_MODEL,
-        dimensions: EMBEDDING_DIMENSIONS,
-        cached: !!cachedEmbedding
-      }
-    })
-
-    await logTimestamp({
-      entityType: 'response',
-      entityId: requestId,
-      createdAt: new Date(startTime + embeddingDuration + searchDuration + chatDuration),
-      sourceTable: 'responses',
-      sessionId: requestId,
-      metadata: {
-        model: CHAT_MODEL,
-        groundingScore: groundingValidation.score,
-        wordCount: (generatedResponse.match(/\S+/g) || []).length
-      }
-    })
-
-    // Log timestamps for each match
-    for (let i = 0; i < matches.length; i++) {
-      await logTimestamp({
-        entityType: 'match',
-        entityId: `${requestId}_match_${i + 1}`,
-        createdAt: new Date(startTime + embeddingDuration + searchDuration),
-        sourceTable: 'matches',
-        sessionId: requestId,
-        metadata: {
-          similarity: matches[i].similarity,
-          rankPosition: i + 1,
-          source: matches[i].source
-        }
-      })
-    }
-
-    // Log comprehensive RAG request data using supabaseAdmin
-    await logRAGRequest({
-      requestId,
-      query,
-      queryType,
-      queryHash,
-      embedding: {
-        vector: queryEmbedding,
-        model: EMBED_MODEL,
-        dimensions: EMBEDDING_DIMENSIONS,
-        duration: embeddingDuration,
-        cached: !!cachedEmbedding
-      },
-      matches: matches.map((match: any, index: number) => ({
-        id: match.id,
-        source: match.source,
-        content: match.content,
-        similarity: match.similarity,
-        rank: index + 1,
-        metadata: match.metadata
-      })),
-      response: {
-        text: generatedResponse,
-        model: CHAT_MODEL,
+    // Log response for analysis using supabaseAdmin (non-blocking)
+    try {
+      await logResponse({
+        requestId,
+        queryHash,
+        responseText: generatedResponse,
+        modelName: CHAT_MODEL,
         temperature: 0.7,
         maxTokens: 1000,
-        duration: chatDuration,
         groundingScore: groundingValidation.score,
-        qualityMetrics: groundingValidation
-      },
-      performance: {
+        hasSourceReferences: groundingValidation.hasSourceReferences,
+        hasDirectQuotes: groundingValidation.hasDirectQuotes,
+        acknowledgesLimitations: groundingValidation.acknowledgesLimitations,
+        avoidsUngroundedClaims: groundingValidation.avoidsUngroundedClaims,
+        sourcesCited: matches.length,
+        directQuotesCount,
+        metadata: {
+          grounding: groundingValidation,
+          model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
+        }
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log response, but continuing:`, logError)
+    }
+
+    // Log matches for analysis using supabaseAdmin (non-blocking)
+    try {
+      await logMatches({
+        requestId,
+        queryHash,
+        matches: matches.map((match: any, index: number) => ({
+          embeddingId: match.id,
+          source: match.source,
+          content: match.content,
+          similarity: match.similarity,
+          rankPosition: index + 1,
+          metadata: match.metadata,
+          wasUsedInResponse: true // All matches in final response were used
+        }))
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log matches, but continuing:`, logError)
+    }
+
+    // Log timestamps for all entities created in this request using supabaseAdmin (non-blocking)
+    const requestTimestamp = new Date(startTime)
+    
+    try {
+      await logTimestamp({
+        entityType: 'chat_query',
+        entityId: requestId,
+        createdAt: requestTimestamp,
+        sourceTable: 'chat_logs',
+        sessionId: requestId,
+        metadata: {
+          queryType,
+          queryLength: query.length,
+          matchCount: matches.length,
+          groundingScore: groundingValidation.score
+        }
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log chat_query timestamp, but continuing:`, logError)
+    }
+
+    try {
+      await logTimestamp({
+        entityType: 'query_embedding',
+        entityId: queryHash,
+        createdAt: requestTimestamp,
+        sourceTable: 'query_embeddings',
+        sessionId: requestId,
+        metadata: {
+          model: EMBED_MODEL,
+          dimensions: EMBEDDING_DIMENSIONS,
+          cached: !!cachedEmbedding
+        }
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log query_embedding timestamp, but continuing:`, logError)
+    }
+
+    try {
+      await logTimestamp({
+        entityType: 'response',
+        entityId: requestId,
+        createdAt: new Date(startTime + embeddingDuration + searchDuration + chatDuration),
+        sourceTable: 'responses',
+        sessionId: requestId,
+        metadata: {
+          model: CHAT_MODEL,
+          groundingScore: groundingValidation.score,
+          wordCount: (generatedResponse.match(/\S+/g) || []).length
+        }
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log response timestamp, but continuing:`, logError)
+    }
+
+    // Log timestamps for each match (non-blocking)
+    for (let i = 0; i < matches.length; i++) {
+      try {
+        await logTimestamp({
+          entityType: 'match',
+          entityId: `${requestId}_match_${i + 1}`,
+          createdAt: new Date(startTime + embeddingDuration + searchDuration),
+          sourceTable: 'matches',
+          sessionId: requestId,
+          metadata: {
+            similarity: matches[i].similarity,
+            rankPosition: i + 1,
+            source: matches[i].source
+          }
+        })
+      } catch (logError) {
+        console.error(`⚠️ [${requestId}] Failed to log match ${i + 1} timestamp, but continuing:`, logError)
+      }
+    }
+
+    // Log comprehensive RAG request data using supabaseAdmin (non-blocking)
+    try {
+      await logRAGRequest({
+        requestId,
+        query,
+        queryType,
+        queryHash,
+        embedding: {
+          vector: queryEmbedding,
+          model: EMBED_MODEL,
+          dimensions: EMBEDDING_DIMENSIONS,
+          duration: embeddingDuration,
+          cached: !!cachedEmbedding
+        },
+        matches: matches.map((match: any, index: number) => ({
+          id: match.id,
+          source: match.source,
+          content: match.content,
+          similarity: match.similarity,
+          rank: index + 1,
+          metadata: match.metadata
+        })),
+        response: {
+          text: generatedResponse,
+          model: CHAT_MODEL,
+          temperature: 0.7,
+          maxTokens: 1000,
+          duration: chatDuration,
+          groundingScore: groundingValidation.score,
+          qualityMetrics: groundingValidation
+        },
+        performance: {
+          embeddingDuration,
+          searchDuration,
+          chatDuration,
+          totalDuration
+        },
+        status: 'success'
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log comprehensive RAG request, but continuing:`, logError)
+    }
+
+    // Log successful completion using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
+    try {
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        response: generatedResponse,
+        sources,
+        metadata: {
+          grounding: groundingValidation,
+          model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
+        },
         embeddingDuration,
         searchDuration,
         chatDuration,
-        totalDuration
-      },
-      status: 'success'
-    })
-
-    // Log successful completion using supabaseAdmin (keeping existing logging for compatibility)
-    await logChatQuery({
-      requestId,
-      query,
-      queryType,
-      response: generatedResponse,
-      sources,
-      metadata: {
-        grounding: groundingValidation,
-        model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
-      },
-      embeddingDuration,
-      searchDuration,
-      chatDuration,
-      totalDuration,
-      matchCount: matches.length,
-      groundingScore: groundingValidation.score,
-      status: 'success'
-    })
+        totalDuration,
+        matchCount: matches.length,
+        groundingScore: groundingValidation.score,
+        status: 'success'
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log successful completion, but continuing:`, logError)
+    }
     
     return NextResponse.json(responseData)
 
@@ -756,34 +820,42 @@ Instructions: Answer the question using ONLY the information provided in the con
       timestamp: new Date().toISOString()
     })
     
-    // Log comprehensive RAG request error using supabaseAdmin
-    await logRAGRequest({
-      requestId,
-      query: query || '[unknown]',
-      queryType,
-      queryHash: queryHash || 'unknown',
-      performance: {
+    // Log comprehensive RAG request error using supabaseAdmin (non-blocking)
+    try {
+      await logRAGRequest({
+        requestId,
+        query: query || '[unknown]',
+        queryType,
+        queryHash: queryHash || 'unknown',
+        performance: {
+          embeddingDuration,
+          searchDuration,
+          chatDuration,
+          totalDuration
+        },
+        status: 'error',
+        errorMessage: `Internal server error: ${error.message}`
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log comprehensive RAG error, but continuing:`, logError)
+    }
+
+    // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
+    try {
+      await logChatQuery({
+        requestId,
+        query: query || '[unknown]',
+        queryType,
+        errorMessage: `Internal server error: ${error.message}`,
+        status: 'error',
         embeddingDuration,
         searchDuration,
         chatDuration,
         totalDuration
-      },
-      status: 'error',
-      errorMessage: `Internal server error: ${error.message}`
-    })
-
-    // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility)
-    await logChatQuery({
-      requestId,
-      query: query || '[unknown]',
-      queryType,
-      errorMessage: `Internal server error: ${error.message}`,
-      status: 'error',
-      embeddingDuration,
-      searchDuration,
-      chatDuration,
-      totalDuration
-    })
+      })
+    } catch (logError) {
+      console.error(`⚠️ [${requestId}] Failed to log unexpected error, but continuing:`, logError)
+    }
     
     return NextResponse.json(
       { 
