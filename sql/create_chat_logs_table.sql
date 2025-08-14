@@ -29,10 +29,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_logs_query_type ON chat_logs(query_type);
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_chat_logs_updated_at 
     BEFORE UPDATE ON chat_logs 
