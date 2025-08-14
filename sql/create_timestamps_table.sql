@@ -75,14 +75,13 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    date_trunc('hour', t.created_at) + 
-    (EXTRACT(hour FROM t.created_at)::INTEGER / bucket_hours * bucket_hours) * INTERVAL '1 hour' as time_bucket,
+    date_trunc('hour', t.created_at) as time_bucket,
     COUNT(*)::INTEGER as entity_count,
     COUNT(DISTINCT t.session_id)::INTEGER as unique_sessions
   FROM timestamps t
   WHERE t.created_at >= NOW() - (hours_back * INTERVAL '1 hour')
     AND (entity_type_param IS NULL OR t.entity_type = entity_type_param)
-  GROUP BY time_bucket
+  GROUP BY date_trunc('hour', t.created_at)
   ORDER BY time_bucket DESC;
 END;
 $$;
