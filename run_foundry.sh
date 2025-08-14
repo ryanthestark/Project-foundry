@@ -21,24 +21,33 @@ else
   echo "[INFO] Aider already installed: $(aider --version)"
 fi
 
-# 3. Run Aider with GOAL + file adds
+# 3. Tell git to ignore venv if not already
+if ! grep -q "^venv/$" .gitignore; then
+  echo "[INFO] Adding venv/ to .gitignore"
+  echo "venv/" >> .gitignore
+fi
+
+# 4. Remove venv from git index if somehow tracked
+if git ls-files --error-unmatch venv >/dev/null 2>&1; then
+  echo "[INFO] Removing venv from git index"
+  git rm -r --cached venv
+fi
+
+# 5. Run Aider with mission goal
 aider --yes --map-tokens 16384 <<EOF
 You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
 
-## SCOPE
-- Verify and repair: file structure, imports/aliases, ts-node + ESM config, env loading, Supabase admin client, runner loop, API routes, and scripts.
-- Do not introduce frameworks or major refactors; keep minimal, working defaults.
-- Make changes directly and show unified diffs in your final report.
+## GOAL
+- Fix missing RAG responses: diagnose why /api/chat/rag isn't returning matches or context despite successful ingestion.
+- Validate Supabase RPC, vector dimensions, metadata filtering, and frontend display logic.
+- Print match count and embedding slice for debug, and repair issues in route.ts or Supabase function as needed.
 
 ## ACCEPTANCE TESTS
-1) \`node --loader ts-node/esm src/runner.ts\` starts, polls Supabase without TypeErrors, and idles when no jobs exist.
-2) \`npm run dev\` serves \`/dashboard/mission-control\`, RAG chat responds, and launching a mission enqueues a job in \`autonomous_jobs\`.
-3) With the runner running, a queued job flips to \`completed\` (or \`failed\`) and status polling in the UI shows the terminal state.
+1. \`npm run ingest\` succeeds without embedding dimension errors.
+2. RAG chat responds with context when user queries "Summarize the strategy documents".
+3. Runner starts, polls Supabase, and executes jobs without errors.
 
-## NON-NEGOTIABLES
-- Fix path alias resolution so imports compile in Next.js and runner.
-- Runner must work locally without Vercel.
-
+## REQUIRED FILES
 /add tsconfig.json
 /add package.json
 /add next.config.js
@@ -47,8 +56,11 @@ You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the 
 /add src/lib/supabaseClient.ts
 /add src/lib/supabaseAdmin.ts
 /add src/app/api/chat/route.ts
+/add src/app/api/chat/rag/route.ts
 /add src/app/api/orchestrator/start/route.ts
 /add src/app/api/orchestrator/status/[id]/route.ts
+/add src/scripts/ingest.ts
+/add supabase/functions/match_embeddings.sql
 EOF
 
 echo "[SUCCESS] run_foundry.sh completed at $(date)"
