@@ -75,9 +75,10 @@ async function testVectorMatch() {
     console.log(`✅ Created embedding: ${queryEmbedding.length} dimensions`)
     
     // Test RPC with real embedding
+    const vectorString = `[${queryEmbedding.join(',')}]`
     const { data: matches, error: matchError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: queryEmbedding,
+        query_embedding: vectorString,
         match_count: 5,
         similarity_threshold: 0.1
       })
