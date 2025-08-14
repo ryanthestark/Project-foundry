@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries } from '@/lib/supabaseAdmin'
+import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 import { createHash } from 'crypto'
 
@@ -588,6 +588,21 @@ Instructions: Answer the question using ONLY the information provided in the con
       totalDuration
     })
     
+    // Log matches for analysis
+    await logMatches({
+      requestId,
+      queryHash,
+      matches: matches.map((match: any, index: number) => ({
+        embeddingId: match.id,
+        source: match.source,
+        content: match.content,
+        similarity: match.similarity,
+        rankPosition: index + 1,
+        metadata: match.metadata,
+        wasUsedInResponse: true // All matches in final response were used
+      }))
+    })
+
     // Log successful completion
     await logChatQuery({
       requestId,

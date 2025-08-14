@@ -97,6 +97,88 @@ export async function findSimilarQueries(embedding: number[], threshold: number 
   }
 }
 
+// Utility functions for matches logging
+export async function logMatches(matchesData: {
+  requestId: string
+  queryHash: string
+  matches: Array<{
+    embeddingId?: string
+    source: string
+    content: string
+    similarity: number
+    rankPosition: number
+    metadata?: any
+    wasUsedInResponse?: boolean
+  }>
+}) {
+  try {
+    const matchRecords = matchesData.matches.map((match, index) => ({
+      request_id: matchesData.requestId,
+      query_hash: matchesData.queryHash,
+      embedding_id: match.embeddingId || null,
+      source: match.source,
+      content: match.content,
+      similarity: match.similarity,
+      rank_position: match.rankPosition || index + 1,
+      metadata: match.metadata || null,
+      content_length: match.content.length,
+      was_used_in_response: match.wasUsedInResponse || false
+    }))
+
+    const { error } = await supabaseAdmin
+      .from('matches')
+      .insert(matchRecords)
+
+    if (error) {
+      console.error('Failed to log matches:', error)
+      return false
+    }
+
+    console.log(`✅ Logged ${matchRecords.length} matches for request: ${matchesData.requestId}`)
+    return true
+  } catch (error) {
+    console.error('Exception while logging matches:', error)
+    return false
+  }
+}
+
+export async function getMatchStats(requestId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_match_stats', {
+      request_id_param: requestId
+    })
+
+    if (error) {
+      console.error('Failed to get match stats:', error)
+      return null
+    }
+
+    return data?.[0] || null
+  } catch (error) {
+    console.error('Exception while getting match stats:', error)
+    return null
+  }
+}
+
+export async function getTopSources(limitCount: number = 10, daysBack: number = 30) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_top_sources', {
+      limit_count: limitCount,
+      days_back: daysBack
+    })
+
+    if (error) {
+      console.error('Failed to get top sources:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Exception while getting top sources:', error)
+    return []
+  }
+}
+
 // Utility function for logging RAG chat queries
 export async function logChatQuery(logData: {
   requestId: string
