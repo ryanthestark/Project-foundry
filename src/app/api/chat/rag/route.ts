@@ -54,11 +54,11 @@ export async function POST(req: Request) {
     console.log("🧪 Embedding sample:", queryEmbedding.slice(0, 5))
     console.log("🧪 Using model:", EMBED_MODEL)
 
-    // Ensure embedding is exactly 1536 dimensions for vector(1536)
-    if (queryEmbedding.length !== 1536) {
+    // Ensure embedding is exactly 512 dimensions for vector(512)
+    if (queryEmbedding.length !== 512) {
       console.error("❌ Embedding dimension mismatch:", queryEmbedding.length)
       return NextResponse.json(
-        { error: 'Embedding dimension mismatch', expected: 1536, actual: queryEmbedding.length },
+        { error: 'Embedding dimension mismatch', expected: 512, actual: queryEmbedding.length },
         { status: 500 }
       )
     }

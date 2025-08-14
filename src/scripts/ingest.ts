@@ -31,9 +31,9 @@ async function embedText(text: string) {
   
   const embedding = response.data[0].embedding
   
-  // Ensure embedding is exactly 1536 dimensions for vector(1536)
-  if (embedding.length !== 1536) {
-    throw new Error(`Embedding dimension mismatch: expected 1536, got ${embedding.length}`)
+  // Ensure embedding is exactly 512 dimensions for vector(512)
+  if (embedding.length !== 512) {
+    throw new Error(`Embedding dimension mismatch: expected 512, got ${embedding.length}`)
   }
   
   return embedding
