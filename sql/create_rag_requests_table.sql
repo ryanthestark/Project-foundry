@@ -59,12 +59,6 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  -- Check if table exists, return zeros if not
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rag_requests') THEN
-    RETURN QUERY SELECT 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-    RETURN;
-  END IF;
-
   RETURN QUERY
   SELECT 
     COALESCE(COUNT(*), 0)::INTEGER as total_requests,
@@ -102,11 +96,6 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  -- Check if table exists, return empty if not
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rag_requests') THEN
-    RETURN;
-  END IF;
-
   RETURN QUERY
   SELECT 
     r.request_id,
