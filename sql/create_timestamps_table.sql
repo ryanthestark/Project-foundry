@@ -46,11 +46,11 @@ BEGIN
   RETURN QUERY
   SELECT 
     t.entity_type,
-    COUNT(*)::INTEGER as total_count,
+    COALESCE(COUNT(*), 0)::INTEGER as total_count,
     MIN(t.created_at) as earliest_timestamp,
     MAX(t.created_at) as latest_timestamp,
-    (COUNT(*)::FLOAT / GREATEST(days_back, 1)) as avg_per_day,
-    COUNT(DISTINCT t.session_id)::INTEGER as unique_sessions
+    COALESCE((COUNT(*)::FLOAT / GREATEST(days_back, 1)), 0.0) as avg_per_day,
+    COALESCE(COUNT(DISTINCT t.session_id), 0)::INTEGER as unique_sessions
   FROM timestamps t
   WHERE t.created_at >= NOW() - (days_back * INTERVAL '1 day')
     AND (entity_type_param IS NULL OR t.entity_type = entity_type_param)
@@ -76,8 +76,8 @@ BEGIN
   RETURN QUERY
   SELECT 
     date_trunc('hour', t.created_at) as time_bucket,
-    COUNT(*)::INTEGER as entity_count,
-    COUNT(DISTINCT t.session_id)::INTEGER as unique_sessions
+    COALESCE(COUNT(*), 0)::INTEGER as entity_count,
+    COALESCE(COUNT(DISTINCT t.session_id), 0)::INTEGER as unique_sessions
   FROM timestamps t
   WHERE t.created_at >= NOW() - (hours_back * INTERVAL '1 hour')
     AND (entity_type_param IS NULL OR t.entity_type = entity_type_param)
