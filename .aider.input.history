@@ -1,0 +1,133 @@
+
+# 2025-08-14 15:19:18.323105
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
++
++## SCOPE
++- Verify and repair: file structure, imports/aliases, ts-node + ESM config, env loading, Supabase admin client, runner loop, API routes, and scripts.
++- Do not introduce frameworks or major refactors; keep minimal, working defaults.
++- Make changes directly and show unified diffs in your final report.
++
++## ACCEPTANCE TESTS
++1) `node --loader ts-node/esm src/runner.ts` starts, polls Supabase without TypeErrors, and idles when no jobs exist.
++2) `npm run dev` serves `/dashboard/mission-control`, RAG chat responds, and launching a mission enqueues a job in `autonomous_jobs`.
++3) With the runner running, a queued job flips to `completed` (or `failed`) and status polling in the UI shows the terminal state.
++
++## NON-NEGOTIABLES
++- Fix path alias resolution so imports compile in Next.js and runner.
++- Runner must work locally without Vercel.
+
+# 2025-08-14 15:19:18.323319
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
++
++## SCOPE
++- Verify and repair: file structure, imports/aliases, ts-node + ESM config, env loading, Supabase admin client, runner loop, API routes, and scripts.
++- Do not introduce frameworks or major refactors; keep minimal, working defaults.
++- Make changes directly and show unified diffs in your final report.
++
++## ACCEPTANCE TESTS
++1) `node --loader ts-node/esm src/runner.ts` starts, polls Supabase without TypeErrors, and idles when no jobs exist.
++2) `npm run dev` serves `/dashboard/mission-control`, RAG chat responds, and launching a mission enqueues a job in `autonomous_jobs`.
++3) With the runner running, a queued job flips to `completed` (or `failed`) and status polling in the UI shows the terminal state.
++
++## NON-NEGOTIABLES
++- Fix path alias resolution so imports compile in Next.js and runner.
++- Runner must work locally without Vercel.
+
+# 2025-08-14 15:28:07.987639
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
+
+# 2025-08-14 15:28:15.030976
++## SCOPE
+
+# 2025-08-14 15:28:19.006031
++- Verify and repair: file structure, imports/aliases, ts-node + ESM config, env loading, Supabase admin client, runner loop, API routes, and scripts.
+
+# 2025-08-14 15:28:24.816989
++- Do not introduce frameworks or major refactors; keep minimal, working defaults.
+
+# 2025-08-14 15:28:28.948180
++- Make changes directly and show unified diffs in your final report.
+
+# 2025-08-14 15:28:33.009615
++## ACCEPTANCE TESTS
+
+# 2025-08-14 15:28:38.595776
++1) `node --loader ts-node/esm src/runner.ts` starts, polls Supabase without TypeErrors, and idles when no jobs exist.
+
+# 2025-08-14 15:28:43.994897
++2) `npm run dev` serves `/dashboard/mission-control`, RAG chat responds, and launching a mission enqueues a job in `autonomous_jobs`.
+
+# 2025-08-14 15:28:54.252858
++3) With the runner running, a queued job flips to `completed` (or `failed`) and status polling in the UI shows the terminal state.
+
+# 2025-08-14 15:29:01.512899
++## NON-NEGOTIABLES
+
+# 2025-08-14 15:29:14.308580
++- Fix path alias resolution so imports compile in Next.js and runner.
+
+# 2025-08-14 15:29:24.949943
++- Runner must work locally without Vercel.
+
+# 2025-08-14 15:29:33.705285
++/add tsconfig.json
+
+# 2025-08-14 15:29:33.724015
++/add package.json
+
+# 2025-08-14 15:29:33.744911
++/add next.config.js
+
+# 2025-08-14 15:29:33.776457
++/add .env.local
+
+# 2025-08-14 15:29:33.804169
++/add src/runner.ts
+
+# 2025-08-14 15:29:33.832199
++/add src/lib/supabaseClient.ts
+
+# 2025-08-14 15:29:33.863678
++/add src/lib/supabaseAdmin.ts
+
+# 2025-08-14 15:29:33.891770
++/add src/app/api/chat/route.ts
+
+# 2025-08-14 15:29:33.921704
++/add src/app/api/orchestrator/start/route.ts
+
+# 2025-08-14 15:29:33.954496
++/add src/app/api/orchestrator/status/[id]/route.ts
+
+# 2025-08-14 17:57:12.356772
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
+
+# 2025-08-14 18:00:07.428025
++## GOAL
+
+# 2025-08-14 18:37:36.298475
++You are debugging a Next.js + Supabase + OpenAI Foundry repo to ensure full local RAG functionality.
+
+# 2025-08-14 18:39:05.553449
++## 🔧 GOAL
+
+# 2025-08-14 18:42:48.369598
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
+
+# 2025-08-14 18:44:01.379889
++## GOAL
+
+# 2025-08-14 18:45:53.503714
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
+
+# 2025-08-14 18:46:27.109238
++## KNOWN ISSUES
+
+# 2025-08-14 18:46:32.763085
++- The web chat responds with: "I need more details" and empty `sources`, despite ingesting docs successfully.
+
+# 2025-08-14 18:47:53.351551
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo so the local runner and RAG chat work end-to-end.
+
+# 2025-08-14 18:48:35.318407
++## GOAL
