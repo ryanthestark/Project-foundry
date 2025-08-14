@@ -3,13 +3,8 @@
 import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../lib/supabaseAdmin'
 import { openai, EMBED_MODEL } from '../lib/openai'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 function inferTypeFromFilename(filename: string): string {
   const normalized = filename.toLowerCase()
@@ -49,7 +44,7 @@ async function ingestFile(filePath: string) {
 
     console.log(`🔄 Processing ${filename} (${embedding.length} dimensions, type: ${type})`)
 
-    const { error } = await supabase.from('embeddings').insert({
+    const { error } = await supabaseAdmin.from('embeddings').insert({
       content,
       source: filename,
       embedding,
