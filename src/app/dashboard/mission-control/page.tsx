@@ -33,8 +33,16 @@ export default function MissionControl() {
     if (trimmed.startsWith('/mission')) {
       response = `🤖: ${JSON.stringify(data, null, 2)}`
     } else {
-      // RAG response - show the actual response text
-      response = `🤖: ${data.response || JSON.stringify(data, null, 2)}`
+      // RAG response - show the actual response text and sources
+      if (data.response) {
+        response = `🤖: ${data.response}`
+        if (data.sources && data.sources.length > 0) {
+          const sourceList = data.sources.map((s: any) => `• ${s.source} (${s.type})`).join('\n')
+          response += `\n\n📚 Sources:\n${sourceList}`
+        }
+      } else {
+        response = `🤖: ${JSON.stringify(data, null, 2)}`
+      }
     }
     
     setMessages(prev => [...prev, response])

@@ -33,8 +33,8 @@ export async function POST(req: Request) {
     // Step 2: Search Supabase via RPC with proper parameter formatting
     const rpcParams = {
       query_embedding: queryEmbedding,
-      match_count: 5,
-      similarity_threshold: 0.6
+      match_count: 8,
+      similarity_threshold: 0.4
     }
 
     // Add type filter only if provided
@@ -72,9 +72,17 @@ export async function POST(req: Request) {
     const chat = await openai.chat.completions.create({
       model: CHAT_MODEL,
       messages: [
-        { role: 'system', content: 'You are a helpful assistant answering questions based on the provided context. If the context doesn\'t contain relevant information, say so clearly.' },
-        { role: 'user', content: `Context:\n${context}\n\nQuery:\n${query}` }
-      ]
+        { 
+          role: 'system', 
+          content: 'You are a knowledgeable assistant helping with questions about business strategy, product development, and project management. Use the provided context to give detailed, actionable answers. If the context doesn\'t fully address the question, mention what information is available and what might be missing.' 
+        },
+        { 
+          role: 'user', 
+          content: `Based on the following context from our knowledge base, please answer this question:\n\nQuestion: ${query}\n\nContext:\n${context}` 
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
     })
 
     return NextResponse.json({
