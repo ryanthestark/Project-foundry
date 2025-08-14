@@ -94,12 +94,28 @@ async function testContextualResponse() {
         responseText.includes(keyword.toLowerCase())
       )
       
-      // Check if response is contextual (mentions sources or specific details)
-      const isContextual = responseText.includes('based on') || 
-                          responseText.includes('according to') ||
-                          responseText.includes('the document') ||
-                          responseText.includes('information shows') ||
-                          sourceCount > 0
+      // Check if response is contextual and grounded
+      const groundingIndicators = [
+        'based on', 'according to', 'the document', 'documents show',
+        'information shows', 'source', 'as stated', 'from the', 'indicates'
+      ]
+      const hasGroundingLanguage = groundingIndicators.some(indicator => 
+        responseText.includes(indicator.toLowerCase())
+      )
+      
+      // Check for direct quotes or specific references
+      const hasQuotes = responseText.includes('"') || responseText.includes("'")
+      
+      // Check for limitation acknowledgment
+      const limitationIndicators = [
+        "don't have", "not enough", "limited information", "insufficient", 
+        "cannot determine", "unclear", "would need more"
+      ]
+      const acknowledgesLimitations = limitationIndicators.some(indicator =>
+        responseText.includes(indicator.toLowerCase())
+      )
+      
+      const isContextual = hasGroundingLanguage || hasQuotes || sourceCount > 0
       
       console.log(`✅ Response generated successfully`)
       console.log(`   📏 Length: ${responseLength} characters`)
@@ -107,6 +123,9 @@ async function testContextualResponse() {
       console.log(`   🎯 Avg similarity: ${avgSimilarity.toFixed(3)}`)
       console.log(`   🔑 Keywords found: ${foundKeywords.length}/${testCase.expectedKeywords.length} (${foundKeywords.join(', ')})`)
       console.log(`   🧠 Contextual: ${isContextual ? 'Yes' : 'No'}`)
+      console.log(`   🔗 Grounding language: ${hasGroundingLanguage ? 'Yes' : 'No'}`)
+      console.log(`   📝 Has quotes: ${hasQuotes ? 'Yes' : 'No'}`)
+      console.log(`   ⚠️ Acknowledges limits: ${acknowledgesLimitations ? 'Yes' : 'No'}`)
       console.log(`   ⏱️ Duration: ${responseTime}ms`)
       
       // Quality checks
@@ -128,6 +147,14 @@ async function testContextualResponse() {
       
       if (!isContextual) {
         console.warn(`   ⚠️ Response doesn't appear to be contextual`)
+      }
+      
+      if (!hasGroundingLanguage && sourceCount > 0) {
+        console.warn(`   ⚠️ Response doesn't reference sources despite having matches`)
+      }
+      
+      if (!acknowledgesLimitations && sourceCount === 0) {
+        console.warn(`   ⚠️ Response should acknowledge lack of information when no sources found`)
       }
       
       // Show response preview and top sources

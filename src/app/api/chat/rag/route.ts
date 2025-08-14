@@ -4,6 +4,71 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 
+// Validate that the response is properly grounded in the provided context
+function validateResponseGrounding(response: string, sources: any[], query: string) {
+  const validation = {
+    hasSourceReferences: false,
+    hasDirectQuotes: false,
+    acknowledgesLimitations: false,
+    avoidsUngroundedClaims: true,
+    score: 0
+  }
+  
+  const responseLower = response.toLowerCase()
+  
+  // Check for source references
+  const sourceReferencePatterns = [
+    /according to/i,
+    /based on/i,
+    /the document/i,
+    /source \d+/i,
+    /from the/i,
+    /as stated in/i,
+    /the information shows/i,
+    /documents indicate/i
+  ]
+  validation.hasSourceReferences = sourceReferencePatterns.some(pattern => pattern.test(response))
+  
+  // Check for direct quotes (text in quotes)
+  validation.hasDirectQuotes = /["'].*?["']/.test(response) || response.includes('"') || response.includes("'")
+  
+  // Check for acknowledgment of limitations
+  const limitationPatterns = [
+    /don't have.*information/i,
+    /not enough.*information/i,
+    /limited.*information/i,
+    /insufficient.*context/i,
+    /cannot.*determine/i,
+    /unclear.*from.*context/i,
+    /would need.*more.*information/i
+  ]
+  validation.acknowledgesLimitations = limitationPatterns.some(pattern => pattern.test(response))
+  
+  // Check for potentially ungrounded claims (red flags)
+  const ungroundedPatterns = [
+    /in general/i,
+    /typically/i,
+    /usually/i,
+    /commonly/i,
+    /it is known that/i,
+    /research shows/i,
+    /studies indicate/i,
+    /experts recommend/i
+  ]
+  validation.avoidsUngroundedClaims = !ungroundedPatterns.some(pattern => pattern.test(response))
+  
+  // Calculate grounding score
+  let score = 0
+  if (validation.hasSourceReferences) score += 30
+  if (validation.hasDirectQuotes) score += 25
+  if (validation.acknowledgesLimitations) score += 20
+  if (validation.avoidsUngroundedClaims) score += 25
+  
+  validation.score = score
+  
+  return validation
+}
+
 export async function POST(req: Request) {
   const startTime = Date.now()
   const requestId = Math.random().toString(36).slice(2, 8)
@@ -264,31 +329,32 @@ export async function POST(req: Request) {
         messages: [
           { 
             role: 'system', 
-            content: `You are an expert assistant with access to a comprehensive knowledge base about business strategy, product development, project management, and organizational planning. 
+            content: `You are a knowledge base assistant that MUST base all responses strictly on the provided context documents. You have NO knowledge outside of what is explicitly provided in the context.
 
-Your role is to provide detailed, actionable, and contextual responses based on the retrieved information. Follow these guidelines:
+CRITICAL REQUIREMENTS:
+1. ONLY use information explicitly stated in the provided context
+2. NEVER add information from your general knowledge
+3. If the context doesn't contain enough information to answer the question, explicitly state this
+4. Always cite which source document(s) you're referencing
+5. Use direct quotes from the context when possible
+6. If the context is empty or irrelevant, state "I don't have relevant information in the knowledge base to answer this question"
 
-1. ALWAYS ground your response in the provided context
-2. Be specific and reference relevant details from the documents
-3. If the context fully answers the question, provide a comprehensive response
-4. If the context partially answers the question, clearly state what information is available and what might be missing
-5. Use a professional but conversational tone
-6. Structure your response with clear sections when appropriate
-7. Include actionable insights and recommendations when relevant
-8. If multiple sources provide different perspectives, acknowledge and synthesize them
+RESPONSE FORMAT:
+- Start with a direct answer based on the context
+- Include specific references to source documents
+- Use quotes from the context to support your points
+- End by noting any limitations in the available information
 
-Remember: Your knowledge comes from the provided context. Do not make assumptions beyond what the documents contain.` 
+Remember: You are a retrieval system, not a general AI assistant. Your value comes from accurately representing what's in the knowledge base, not from adding external knowledge.` 
           },
           { 
             role: 'user', 
-            content: `Please answer the following question using the provided context from our knowledge base. Be specific and reference the relevant information from the documents.
+            content: `Question: ${query}
 
-Question: ${query}
-
-Context from knowledge base:
+Available context from knowledge base:
 ${context}
 
-Please provide a detailed, contextual response based on this information.` 
+Instructions: Answer the question using ONLY the information provided in the context above. If the context doesn't contain sufficient information to answer the question, clearly state this limitation. Always reference which source documents you're using.` 
           }
         ],
         temperature: 0.7,
@@ -319,8 +385,15 @@ Please provide a detailed, contextual response based on this information.`
       )
     }
 
+    const generatedResponse = chat.choices[0].message.content
+    
+    // Validate that response is grounded in context
+    console.log(`🔍 [${requestId}] Validating response grounding...`)
+    const groundingValidation = validateResponseGrounding(generatedResponse, matches, query)
+    console.log(`🧪 [${requestId}] Grounding validation:`, groundingValidation)
+    
     const responseData = {
-      response: chat.choices[0].message.content,
+      response: generatedResponse,
       sources: matches.map((m: any) => ({
         source: m.source || 'unknown',
         similarity: m.similarity || 0,
@@ -331,6 +404,7 @@ Please provide a detailed, contextual response based on this information.`
         timestamp: new Date().toISOString(),
         duration: Date.now() - startTime,
         matchCount: matches.length,
+        grounding: groundingValidation,
         model: {
           embedding: EMBED_MODEL,
           chat: CHAT_MODEL
