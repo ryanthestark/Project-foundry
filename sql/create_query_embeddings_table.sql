@@ -22,10 +22,10 @@ CREATE INDEX IF NOT EXISTS idx_query_embeddings_last_used ON query_embeddings(la
 CREATE INDEX IF NOT EXISTS idx_query_embeddings_model ON query_embeddings(model_name);
 CREATE INDEX IF NOT EXISTS idx_query_embeddings_usage_count ON query_embeddings(usage_count DESC);
 
--- Create vector similarity index for finding similar queries
-CREATE INDEX IF NOT EXISTS idx_query_embeddings_vector 
-ON query_embeddings USING ivfflat (embedding vector_cosine_ops) 
-WITH (lists = 100);
+-- Create vector similarity index for finding similar queries (commented out for now)
+-- CREATE INDEX IF NOT EXISTS idx_query_embeddings_vector 
+-- ON query_embeddings USING ivfflat (embedding vector_cosine_ops) 
+-- WITH (lists = 100);
 
 -- Function to find similar queries
 CREATE OR REPLACE FUNCTION find_similar_queries(
