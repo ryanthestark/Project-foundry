@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
+import { logChatQuery } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 
 // Validate that the response is properly grounded in the provided context
@@ -73,6 +74,15 @@ export async function POST(req: Request) {
   const startTime = Date.now()
   const requestId = Math.random().toString(36).slice(2, 8)
   
+  // Initialize timing variables for detailed logging
+  let embeddingDuration = 0
+  let searchDuration = 0
+  let chatDuration = 0
+  let query = ''
+  let queryType = ''
+  let errorMessage = ''
+  let status: 'success' | 'error' | 'partial' = 'success'
+  
   try {
     console.log(`🔵 [${requestId}] RAG endpoint called at ${new Date().toISOString()}`)
     
@@ -91,10 +101,26 @@ export async function POST(req: Request) {
       )
     }
     
-    const { query, type } = body
+    const { query: rawQuery, type } = body
+    query = rawQuery
+    queryType = type
 
     if (!query || typeof query !== 'string') {
       console.error(`❌ [${requestId}] Missing or invalid query parameter:`, { query, type: typeof query })
+      
+      errorMessage = 'Query parameter is required and must be a string'
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query: query || '[invalid]',
+        queryType,
+        errorMessage,
+        status,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Query parameter is required and must be a string',
@@ -108,6 +134,20 @@ export async function POST(req: Request) {
 
     if (query.length > 10000) {
       console.error(`❌ [${requestId}] Query too long:`, query.length)
+      
+      errorMessage = `Query is too long (max 10000 characters): ${query.length}`
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query: query.slice(0, 1000) + '...[truncated]',
+        queryType,
+        errorMessage,
+        status,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Query is too long (max 10000 characters)',
@@ -134,16 +174,33 @@ export async function POST(req: Request) {
         model: EMBED_MODEL,
         dimensions: EMBEDDING_DIMENSIONS, // Must match Supabase vector schema
       })
-      console.log(`✅ [${requestId}] Embedding created in ${Date.now() - embedStartTime}ms`)
+      embeddingDuration = Date.now() - embedStartTime
+      console.log(`✅ [${requestId}] Embedding created in ${embeddingDuration}ms`)
     } catch (error) {
+      embeddingDuration = Date.now() - embedStartTime
       console.error(`❌ [${requestId}] OpenAI embedding failed:`, {
         error: error.message,
         code: error.code,
         type: error.type,
         model: EMBED_MODEL,
         queryLength: query.length,
-        duration: Date.now() - embedStartTime
+        duration: embeddingDuration
       })
+      
+      errorMessage = `Failed to create embedding: ${error.message}`
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        errorMessage,
+        status,
+        embeddingDuration,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Failed to create embedding', 
@@ -169,6 +226,21 @@ export async function POST(req: Request) {
       console.log(`✅ [${requestId}] Embedding dimensions validated: ${queryEmbedding.length} matches vector(${EMBEDDING_DIMENSIONS})`)
     } catch (error) {
       console.error(`❌ [${requestId}] Embedding validation failed:`, error.message)
+      
+      errorMessage = `Embedding validation failed: ${error.message}`
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        errorMessage,
+        status,
+        embeddingDuration,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Embedding validation failed', 
@@ -210,8 +282,8 @@ export async function POST(req: Request) {
     console.log(`🔄 [${requestId}] Calling Supabase match_embeddings RPC...`)
     const rpcStartTime = Date.now()
     const { data: matches, error } = await supabase.rpc('match_embeddings', rpcParams)
-    const rpcDuration = Date.now() - rpcStartTime
-    console.log(`🧪 [${requestId}] RPC completed in ${rpcDuration}ms`)
+    searchDuration = Date.now() - rpcStartTime
+    console.log(`🧪 [${requestId}] RPC completed in ${searchDuration}ms`)
 
     console.log(`🧪 [${requestId}] Raw RPC response - data:`, matches?.length || 0, 'matches')
     console.log(`🧪 [${requestId}] Raw RPC response - error:`, error)
@@ -231,7 +303,7 @@ export async function POST(req: Request) {
         details: error.details,
         hint: error.hint,
         rpcParams: { ...rpcParams, query_embedding: `[${queryEmbedding.length}D vector]` },
-        duration: rpcDuration
+        duration: searchDuration
       })
       
       // Try a simple query to test connection
@@ -247,11 +319,26 @@ export async function POST(req: Request) {
         testError: testError
       })
       
+      errorMessage = `Supabase match_embeddings failed: ${error.message}`
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        errorMessage,
+        status,
+        embeddingDuration,
+        searchDuration,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Supabase match_embeddings failed', 
           details: error,
-          rpcDuration,
+          rpcDuration: searchDuration,
           connectionTest: { hasData: !!testData?.length, error: testError },
           requestId,
           timestamp: new Date().toISOString()
@@ -303,8 +390,26 @@ export async function POST(req: Request) {
     // Handle case where no matches are found
     if (!matches || matches.length === 0) {
       console.log("⚠️ No matches found for query")
+      
+      const noMatchResponse = "I couldn't find any relevant information in the knowledge base for your query."
+      status = 'partial'
+      
+      // Log the partial result
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        response: noMatchResponse,
+        sources: [],
+        embeddingDuration,
+        searchDuration,
+        matchCount: 0,
+        status,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json({
-        response: "I couldn't find any relevant information in the knowledge base for your query.",
+        response: noMatchResponse,
         sources: []
       })
     }
@@ -360,10 +465,10 @@ Instructions: Answer the question using ONLY the information provided in the con
         temperature: 0.7,
         max_tokens: 1000
       })
-      const chatDuration = Date.now() - chatStartTime
+      chatDuration = Date.now() - chatStartTime
       console.log(`✅ [${requestId}] Chat response generated successfully in ${chatDuration}ms`)
     } catch (error) {
-      const chatDuration = Date.now() - chatStartTime
+      chatDuration = Date.now() - chatStartTime
       console.error(`❌ [${requestId}] OpenAI chat completion failed:`, {
         error: error.message,
         code: error.code,
@@ -372,6 +477,29 @@ Instructions: Answer the question using ONLY the information provided in the con
         contextLength: context.length,
         duration: chatDuration
       })
+      
+      errorMessage = `Failed to generate response: ${error.message}`
+      status = 'error'
+      
+      // Log the error
+      await logChatQuery({
+        requestId,
+        query,
+        queryType,
+        sources: matches.map((m: any) => ({
+          source: m.source || 'unknown',
+          similarity: m.similarity || 0,
+          type: m.metadata?.type || m.type || 'unknown'
+        })),
+        errorMessage,
+        status,
+        embeddingDuration,
+        searchDuration,
+        chatDuration,
+        matchCount: matches.length,
+        totalDuration: Date.now() - startTime
+      })
+      
       return NextResponse.json(
         { 
           error: 'Failed to generate response', 
@@ -392,17 +520,20 @@ Instructions: Answer the question using ONLY the information provided in the con
     const groundingValidation = validateResponseGrounding(generatedResponse, matches, query)
     console.log(`🧪 [${requestId}] Grounding validation:`, groundingValidation)
     
+    const totalDuration = Date.now() - startTime
+    const sources = matches.map((m: any) => ({
+      source: m.source || 'unknown',
+      similarity: m.similarity || 0,
+      type: m.metadata?.type || m.type || 'unknown'
+    }))
+    
     const responseData = {
       response: generatedResponse,
-      sources: matches.map((m: any) => ({
-        source: m.source || 'unknown',
-        similarity: m.similarity || 0,
-        type: m.metadata?.type || m.type || 'unknown'
-      })),
+      sources,
       metadata: {
         requestId,
         timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
+        duration: totalDuration,
         matchCount: matches.length,
         grounding: groundingValidation,
         model: {
@@ -415,7 +546,27 @@ Instructions: Answer the question using ONLY the information provided in the con
     console.log(`🧪 [${requestId}] Final response data:`, {
       responseLength: responseData.response?.length || 0,
       sourceCount: responseData.sources.length,
-      totalDuration: Date.now() - startTime
+      totalDuration
+    })
+    
+    // Log successful completion
+    await logChatQuery({
+      requestId,
+      query,
+      queryType,
+      response: generatedResponse,
+      sources,
+      metadata: {
+        grounding: groundingValidation,
+        model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
+      },
+      embeddingDuration,
+      searchDuration,
+      chatDuration,
+      totalDuration,
+      matchCount: matches.length,
+      groundingScore: groundingValidation.score,
+      status: 'success'
     })
     
     return NextResponse.json(responseData)
@@ -428,6 +579,20 @@ Instructions: Answer the question using ONLY the information provided in the con
       duration: totalDuration,
       timestamp: new Date().toISOString()
     })
+    
+    // Log the unexpected error
+    await logChatQuery({
+      requestId,
+      query: query || '[unknown]',
+      queryType,
+      errorMessage: `Internal server error: ${error.message}`,
+      status: 'error',
+      embeddingDuration,
+      searchDuration,
+      chatDuration,
+      totalDuration
+    })
+    
     return NextResponse.json(
       { 
         error: 'Internal server error', 
