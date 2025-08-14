@@ -1,7 +1,7 @@
 
 import 'dotenv/config'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
-import { openai, EMBED_MODEL, CHAT_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '../lib/openai'
 
 async function validateEnvironment() {
   console.log('🔍 Validating Environment Variables...')
@@ -28,30 +28,19 @@ async function validateOpenAI() {
     const response = await openai.embeddings.create({
       input: 'test embedding for validation',
       model: EMBED_MODEL,
-      dimensions: 512
+      dimensions: EMBEDDING_DIMENSIONS
     })
     
     const embedding = response.data[0].embedding
     
-    // Validate embedding properties
-    if (!Array.isArray(embedding)) {
-      throw new Error('Embedding is not an array')
-    }
-    
-    if (embedding.length !== 512) {
-      throw new Error(`Expected 512 dimensions, got ${embedding.length}`)
-    }
-    
-    // Check for valid numbers
-    const invalidValues = embedding.filter(val => typeof val !== 'number' || isNaN(val))
-    if (invalidValues.length > 0) {
-      throw new Error(`Found ${invalidValues.length} invalid values in embedding`)
-    }
+    // Validate embedding dimensions match Supabase schema
+    validateEmbeddingDimensions(embedding)
     
     // Check magnitude (should be normalized)
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
     
     console.log(`✅ OpenAI Embeddings: ${EMBED_MODEL} (${embedding.length}D, magnitude: ${magnitude.toFixed(4)})`)
+    console.log(`✅ Embedding dimensions match Supabase vector(${EMBEDDING_DIMENSIONS}) schema`)
     
     // Test chat completion
     const chat = await openai.chat.completions.create({

@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { openai, EMBED_MODEL, CHAT_MODEL } from '@/lib/openai'
+import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 
 export async function POST(req: Request) {
   const startTime = Date.now()
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       embedRes = await openai.embeddings.create({
         input: query,
         model: EMBED_MODEL,
-        dimensions: 512, // Force 512 dimensions for Supabase vector(512)
+        dimensions: EMBEDDING_DIMENSIONS, // Must match Supabase vector schema
       })
       console.log(`✅ [${requestId}] Embedding created in ${Date.now() - embedStartTime}ms`)
     } catch (error) {
@@ -98,17 +98,17 @@ export async function POST(req: Request) {
     console.log(`🧪 [${requestId}] Embedding sample (last 5):`, queryEmbedding.slice(-5).map(v => v.toFixed(4)))
     console.log(`🧪 [${requestId}] Using model:`, EMBED_MODEL)
 
-    // Ensure embedding is exactly 512 dimensions for vector(512)
-    if (queryEmbedding.length !== 512) {
-      console.error(`❌ [${requestId}] Embedding dimension mismatch:`, {
-        expected: 512,
-        actual: queryEmbedding.length,
-        model: EMBED_MODEL
-      })
+    // Validate embedding dimensions match Supabase schema
+    try {
+      validateEmbeddingDimensions(queryEmbedding)
+      console.log(`✅ [${requestId}] Embedding dimensions validated: ${queryEmbedding.length} matches vector(${EMBEDDING_DIMENSIONS})`)
+    } catch (error) {
+      console.error(`❌ [${requestId}] Embedding validation failed:`, error.message)
       return NextResponse.json(
         { 
-          error: 'Embedding dimension mismatch', 
-          expected: 512, 
+          error: 'Embedding validation failed', 
+          details: error.message,
+          expected: EMBEDDING_DIMENSIONS,
           actual: queryEmbedding.length,
           model: EMBED_MODEL,
           requestId,

@@ -4,7 +4,7 @@ import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
-import { openai, EMBED_MODEL } from '../lib/openai'
+import { openai, EMBED_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '../lib/openai'
 
 function inferTypeFromFilename(filename: string): string {
   const normalized = filename.toLowerCase()
@@ -22,15 +22,13 @@ async function embedText(text: string) {
   const response = await openai.embeddings.create({
     input: text,
     model: EMBED_MODEL,
-    dimensions: 512, // Force 512 dimensions for Supabase vector(512)
+    dimensions: EMBEDDING_DIMENSIONS, // Must match Supabase vector schema
   })
   
   const embedding = response.data[0].embedding
   
-  // Ensure embedding is exactly 512 dimensions for vector(512)
-  if (embedding.length !== 512) {
-    throw new Error(`Embedding dimension mismatch: expected 512, got ${embedding.length}`)
-  }
+  // Validate embedding dimensions match Supabase schema
+  validateEmbeddingDimensions(embedding)
   
   return embedding
 }
