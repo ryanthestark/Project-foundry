@@ -81,12 +81,22 @@ export async function POST(req: Request) {
     console.log("🔄 Calling Supabase match_embeddings RPC...")
     const { data: matches, error } = await supabase.rpc('match_embeddings', rpcParams)
 
+    console.log("🧪 Raw RPC response - data:", matches)
+    console.log("🧪 Raw RPC response - error:", error)
     console.log("🧪 Matches returned:", matches?.length || 0)
-    console.log("🧪 RPC error:", error)
     
     if (error) {
       console.error("❌ Supabase match_embeddings error:", error)
       console.error("❌ RPC params were:", { ...rpcParams, query_embedding: `[${queryEmbedding.length}D vector]` })
+      
+      // Try a simple query to test connection
+      const { data: testData, error: testError } = await supabase
+        .from('embeddings')
+        .select('id, source')
+        .limit(1)
+      
+      console.log("🧪 Test query result:", testData, "Error:", testError)
+      
       return NextResponse.json(
         { error: 'Supabase match_embeddings failed', details: error },
         { status: 500 }
@@ -96,16 +106,27 @@ export async function POST(req: Request) {
     if (matches && matches.length > 0) {
       console.log("🧪 Top match similarity:", matches[0].similarity)
       console.log("🧪 Match sources:", matches.map(m => m.source))
-      console.log("🧪 Sample match:", matches[0])
+      console.log("🧪 Sample match structure:", Object.keys(matches[0]))
+      console.log("🧪 Full sample match:", matches[0])
     } else {
-      console.log("⚠️ No matches found - checking if embeddings table has data")
+      console.log("⚠️ No matches found - running diagnostics...")
       
       // Debug: Check if embeddings table has any data
-      const { data: count, error: countError } = await supabase
+      const { data: allRows, error: countError } = await supabase
         .from('embeddings')
-        .select('id', { count: 'exact', head: true })
+        .select('id, source, metadata')
+        .limit(5)
       
-      console.log("🧪 Embeddings table count:", count, "Error:", countError)
+      console.log("🧪 Sample embeddings rows:", allRows)
+      console.log("🧪 Count query error:", countError)
+      
+      // Try a manual similarity search without RPC
+      const { data: manualTest, error: manualError } = await supabase
+        .from('embeddings')
+        .select('*')
+        .limit(1)
+      
+      console.log("🧪 Manual embeddings test:", manualTest?.length, "Error:", manualError)
     }
 
     // Handle case where no matches are found
@@ -152,14 +173,18 @@ export async function POST(req: Request) {
     
     console.log("✅ Chat response generated successfully")
 
-    return NextResponse.json({
+    const responseData = {
       response: chat.choices[0].message.content,
       sources: matches.map((m: any) => ({
-        source: m.source,
-        similarity: m.similarity,
-        type: m.type
+        source: m.source || 'unknown',
+        similarity: m.similarity || 0,
+        type: m.metadata?.type || m.type || 'unknown'
       }))
-    })
+    }
+    
+    console.log("🧪 Final response data:", responseData)
+    
+    return NextResponse.json(responseData)
 
   } catch (error) {
     console.error("❌ RAG endpoint error:", error)

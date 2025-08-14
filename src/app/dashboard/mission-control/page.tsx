@@ -38,6 +38,8 @@ export default function MissionControl() {
 
       const data = await res.json()
       console.log("🔵 UI: Response data:", data)
+      console.log("🔵 UI: Sources array:", data.sources)
+      console.log("🔵 UI: Sources length:", data.sources?.length)
     
     // Format response based on endpoint
     let response = ''
@@ -47,9 +49,19 @@ export default function MissionControl() {
       // RAG response - show the actual response text and sources
       if (data.response) {
         response = `🤖: ${data.response}`
-        if (data.sources && data.sources.length > 0) {
-          const sourceList = data.sources.map((s: any) => `• ${s.source} (${s.type})`).join('\n')
-          response += `\n\n📚 Sources:\n${sourceList}`
+        if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+          const sourceList = data.sources.map((s: any) => {
+            const similarity = s.similarity ? ` (${(s.similarity * 100).toFixed(1)}%)` : ''
+            return `• ${s.source} (${s.type})${similarity}`
+          }).join('\n')
+          response += `\n\n📚 Sources (${data.sources.length}):\n${sourceList}`
+        } else {
+          response += `\n\n📚 No sources found`
+        }
+      } else if (data.error) {
+        response = `🤖 Error: ${data.error}`
+        if (data.details) {
+          response += `\nDetails: ${JSON.stringify(data.details, null, 2)}`
         }
       } else {
         response = `🤖: ${JSON.stringify(data, null, 2)}`
