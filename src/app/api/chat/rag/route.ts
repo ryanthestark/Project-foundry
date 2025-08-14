@@ -224,9 +224,12 @@ export async function POST(req: Request) {
       })
     }
 
-    // Step 3: Generate context from matched chunks
-    const context = matches.map((m: any) => m.content).join('\n---\n')
+    // Step 3: Generate context from matched chunks with source attribution
+    const context = matches.map((m: any, index: number) => 
+      `[Source ${index + 1}: ${m.source}]\n${m.content}`
+    ).join('\n\n---\n\n')
     console.log("🧪 Context length:", context.length)
+    console.log("🧪 Context sources:", matches.map(m => m.source).join(', '))
 
     // Step 4: Generate a chat response
     console.log(`🔄 [${requestId}] Generating chat response...`)
@@ -241,11 +244,31 @@ export async function POST(req: Request) {
         messages: [
           { 
             role: 'system', 
-            content: 'You are a knowledgeable assistant helping with questions about business strategy, product development, and project management. Use the provided context to give detailed, actionable answers. If the context doesn\'t fully address the question, mention what information is available and what might be missing.' 
+            content: `You are an expert assistant with access to a comprehensive knowledge base about business strategy, product development, project management, and organizational planning. 
+
+Your role is to provide detailed, actionable, and contextual responses based on the retrieved information. Follow these guidelines:
+
+1. ALWAYS ground your response in the provided context
+2. Be specific and reference relevant details from the documents
+3. If the context fully answers the question, provide a comprehensive response
+4. If the context partially answers the question, clearly state what information is available and what might be missing
+5. Use a professional but conversational tone
+6. Structure your response with clear sections when appropriate
+7. Include actionable insights and recommendations when relevant
+8. If multiple sources provide different perspectives, acknowledge and synthesize them
+
+Remember: Your knowledge comes from the provided context. Do not make assumptions beyond what the documents contain.` 
           },
           { 
             role: 'user', 
-            content: `Based on the following context from our knowledge base, please answer this question:\n\nQuestion: ${query}\n\nContext:\n${context}` 
+            content: `Please answer the following question using the provided context from our knowledge base. Be specific and reference the relevant information from the documents.
+
+Question: ${query}
+
+Context from knowledge base:
+${context}
+
+Please provide a detailed, contextual response based on this information.` 
           }
         ],
         temperature: 0.7,
