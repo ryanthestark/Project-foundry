@@ -1,3 +1,6 @@
+-- Enable pgvector extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Create query_embeddings table for storing and caching query embeddings
 CREATE TABLE IF NOT EXISTS query_embeddings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
