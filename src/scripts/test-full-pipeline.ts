@@ -71,9 +71,10 @@ async function testFullPipeline() {
   console.log('4️⃣ Testing Vector Similarity Function...')
   try {
     const testVector = new Array(512).fill(0.1)
+    const testVectorString = `[${testVector.join(',')}]`
     const { data: rpcResult, error: rpcError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 2,
         similarity_threshold: 0.0
       })

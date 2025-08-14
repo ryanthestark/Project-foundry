@@ -166,9 +166,10 @@ async function validateFullRAGFlow() {
     const queryEmbedding = embedResponse.data[0].embedding
     
     // Test basic RPC call
+    const vectorString = `[${queryEmbedding.join(',')}]`
     const { data: matches, error: rpcError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: queryEmbedding,
+        query_embedding: vectorString,
         match_count: 5,
         similarity_threshold: 0.1
       })
@@ -198,7 +199,7 @@ async function validateFullRAGFlow() {
       const testType = availableTypes[0]
       const { data: filtered, error: filterError } = await supabaseAdmin
         .rpc('match_embeddings', {
-          query_embedding: queryEmbedding,
+          query_embedding: vectorString,
           match_count: 5,
           similarity_threshold: 0.0,
           filter_type: testType

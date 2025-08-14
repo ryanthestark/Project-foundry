@@ -117,8 +117,11 @@ export async function POST(req: Request) {
     }
 
     // Step 2: Search Supabase via RPC with proper parameter formatting
+    // Convert array to proper vector format for PostgreSQL
+    const vectorString = `[${queryEmbedding.join(',')}]`
+    
     const rpcParams: any = {
-      query_embedding: queryEmbedding,
+      query_embedding: vectorString,
       match_count: 8,
       similarity_threshold: 0.3  // Lower threshold to find more matches
     }
@@ -133,7 +136,7 @@ export async function POST(req: Request) {
 
     console.log(`🧪 [${requestId}] RPC params:`, { 
       ...rpcParams, 
-      query_embedding: `[${queryEmbedding.length}D vector]`,
+      query_embedding: `[${queryEmbedding.length}D vector string]`,
       filter_type: rpcParams.filter_type || 'none'
     })
 

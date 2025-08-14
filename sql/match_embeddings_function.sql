@@ -12,10 +12,8 @@ RETURNS TABLE (
   metadata jsonb,
   similarity float
 )
-LANGUAGE plpgsql
+LANGUAGE sql
 AS $$
-BEGIN
-  RETURN QUERY
   SELECT
     e.id,
     e.content,
@@ -28,5 +26,4 @@ BEGIN
     AND (filter_type IS NULL OR e.metadata->>'type' = filter_type)
   ORDER BY e.embedding <=> query_embedding
   LIMIT match_count;
-END;
 $$;

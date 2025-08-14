@@ -117,11 +117,12 @@ async function testVectorMatch() {
   console.log('4️⃣ Testing Type Filtering...')
   try {
     const testVector = new Array(512).fill(0.1)
+    const testVectorString = `[${testVector.join(',')}]`
     
     // Test without filter
     const { data: unfiltered, error: unfilteredError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 10,
         similarity_threshold: 0.0
       })
@@ -139,7 +140,7 @@ async function testVectorMatch() {
       const testType = availableTypes[0]
       const { data: filtered, error: filteredError } = await supabaseAdmin
         .rpc('match_embeddings', {
-          query_embedding: testVector,
+          query_embedding: testVectorString,
           match_count: 10,
           similarity_threshold: 0.0,
           filter_type: testType
@@ -170,13 +171,14 @@ async function testVectorMatch() {
   console.log('5️⃣ Testing Similarity Thresholds...')
   try {
     const testVector = new Array(512).fill(0.1)
+    const testVectorString = `[${testVector.join(',')}]`
     
     const thresholds = [0.0, 0.3, 0.5, 0.8]
     
     for (const threshold of thresholds) {
       const { data: results, error } = await supabaseAdmin
         .rpc('match_embeddings', {
-          query_embedding: testVector,
+          query_embedding: testVectorString,
           match_count: 10,
           similarity_threshold: threshold
         })
@@ -208,11 +210,12 @@ async function testVectorMatch() {
   console.log('6️⃣ Testing Edge Cases...')
   try {
     const testVector = new Array(512).fill(0.1)
+    const testVectorString = `[${testVector.join(',')}]`
     
     // Test with match_count = 0
     const { data: zeroCount, error: zeroError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 0,
         similarity_threshold: 0.0
       })
@@ -226,7 +229,7 @@ async function testVectorMatch() {
     // Test with very high threshold
     const { data: highThreshold, error: highError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 5,
         similarity_threshold: 0.99
       })
@@ -237,7 +240,7 @@ async function testVectorMatch() {
     // Test with invalid type filter
     const { data: invalidType, error: invalidError } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 5,
         similarity_threshold: 0.0,
         filter_type: 'nonexistent_type_12345'
