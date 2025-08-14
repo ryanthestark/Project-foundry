@@ -2,9 +2,47 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { supabaseAdmin, logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp, logRAGRequest } from '@/lib/supabaseAdmin'
-import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
+import {
+  supabaseAdmin,
+  logChatQuery,
+  getQueryEmbedding,
+  saveQueryEmbedding,
+  findSimilarQueries,
+  logMatches,
+  logResponse,
+  logTimestamp,
+  logRAGRequest
+} from '@/lib/supabaseAdmin'
+import {
+  openai,
+  EMBED_MODEL,
+  CHAT_MODEL,
+  EMBEDDING_DIMENSIONS,
+  validateEmbeddingDimensions
+} from '@/lib/openai'
 import { createHash } from 'crypto'
+import { logRagEventNonBlocking, toNumberArray512 } from '@/lib/ragLogger'
+
+// ---------- NEW: normalize any embedding shape into number[] ----------
+function normalizeEmbedding(input: any): number[] {
+  if (Array.isArray(input)) return input.map(Number)
+  if (input && typeof input === 'object' && typeof input.length === 'number') {
+    try { return Array.from(input as ArrayLike<number>).map(Number) } catch {}
+  }
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input)
+      if (Array.isArray(parsed)) return parsed.map(Number)
+    } catch {
+      const cleaned = input.trim().replace(/^\[|\]$/g, '')
+      if (cleaned.length) {
+        return cleaned.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n))
+      }
+    }
+  }
+  // Fallback to zeros to avoid crashes; validation will still warn downstream.
+  return new Array(EMBEDDING_DIMENSIONS).fill(0)
+}
 
 // Validate that the response is properly grounded in the provided context
 function validateResponseGrounding(response: string, sources: any[], query: string) {
@@ -15,9 +53,9 @@ function validateResponseGrounding(response: string, sources: any[], query: stri
     avoidsUngroundedClaims: true,
     score: 0
   }
-  
+
   const responseLower = response.toLowerCase()
-  
+
   // Check for source references
   const sourceReferencePatterns = [
     /according to/i,
@@ -29,11 +67,11 @@ function validateResponseGrounding(response: string, sources: any[], query: stri
     /the information shows/i,
     /documents indicate/i
   ]
-  validation.hasSourceReferences = sourceReferencePatterns.some(pattern => pattern.test(response))
-  
+  validation.hasSourceReferences = sourceReferencePatterns.some(pattern => pattern.test(responseLower))
+
   // Check for direct quotes (text in quotes)
   validation.hasDirectQuotes = /["'].*?["']/.test(response) || response.includes('"') || response.includes("'")
-  
+
   // Check for acknowledgment of limitations
   const limitationPatterns = [
     /don't have.*information/i,
@@ -44,8 +82,8 @@ function validateResponseGrounding(response: string, sources: any[], query: stri
     /unclear.*from.*context/i,
     /would need.*more.*information/i
   ]
-  validation.acknowledgesLimitations = limitationPatterns.some(pattern => pattern.test(response))
-  
+  validation.acknowledgesLimitations = limitationPatterns.some(pattern => pattern.test(responseLower))
+
   // Check for potentially ungrounded claims (red flags)
   const ungroundedPatterns = [
     /in general/i,
@@ -57,24 +95,23 @@ function validateResponseGrounding(response: string, sources: any[], query: stri
     /studies indicate/i,
     /experts recommend/i
   ]
-  validation.avoidsUngroundedClaims = !ungroundedPatterns.some(pattern => pattern.test(response))
-  
+  validation.avoidsUngroundedClaims = !ungroundedPatterns.some(pattern => pattern.test(responseLower))
+
   // Calculate grounding score
   let score = 0
   if (validation.hasSourceReferences) score += 30
   if (validation.hasDirectQuotes) score += 25
   if (validation.acknowledgesLimitations) score += 20
   if (validation.avoidsUngroundedClaims) score += 25
-  
   validation.score = score
-  
+
   return validation
 }
 
 export async function POST(req: Request) {
   const startTime = Date.now()
   const requestId = Math.random().toString(36).slice(2, 8)
-  
+
   // Initialize timing variables for detailed logging
   let embeddingDuration = 0
   let searchDuration = 0
@@ -83,17 +120,17 @@ export async function POST(req: Request) {
   let queryType = ''
   let errorMessage = ''
   let status: 'success' | 'error' | 'partial' = 'success'
-  
+
   try {
     console.log(`🔵 [${requestId}] RAG endpoint called at ${new Date().toISOString()}`)
-    
+
     let body
     try {
       body = await req.json()
     } catch (error) {
       console.error(`❌ [${requestId}] Failed to parse request body:`, error)
       return NextResponse.json(
-        { 
+        {
           error: 'Invalid JSON in request body',
           requestId,
           timestamp: new Date().toISOString()
@@ -101,17 +138,17 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
-    
+
     const { query: rawQuery, type } = body
     query = rawQuery
     queryType = type
 
     if (!query || typeof query !== 'string') {
       console.error(`❌ [${requestId}] Missing or invalid query parameter:`, { query, type: typeof query })
-      
+
       errorMessage = 'Query parameter is required and must be a string'
       status = 'error'
-      
+
       // Log the error using supabaseAdmin (non-blocking)
       try {
         await logChatQuery({
@@ -125,9 +162,9 @@ export async function POST(req: Request) {
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
       }
-      
+
       return NextResponse.json(
-        { 
+        {
           error: 'Query parameter is required and must be a string',
           received: { query, queryType: typeof query },
           requestId,
@@ -139,10 +176,10 @@ export async function POST(req: Request) {
 
     if (query.length > 10000) {
       console.error(`❌ [${requestId}] Query too long:`, query.length)
-      
+
       errorMessage = `Query is too long (max 10000 characters): ${query.length}`
       status = 'error'
-      
+
       // Log the error using supabaseAdmin (non-blocking)
       try {
         await logChatQuery({
@@ -156,9 +193,9 @@ export async function POST(req: Request) {
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
       }
-      
+
       return NextResponse.json(
-        { 
+        {
           error: 'Query is too long (max 10000 characters)',
           length: query.length,
           requestId,
@@ -180,24 +217,24 @@ export async function POST(req: Request) {
 
     let queryEmbedding: number[]
     const embedStartTime = Date.now()
-    
+
     // Try to get cached embedding first
     console.log(`🔄 [${requestId}] Checking for cached embedding...`)
     const cachedEmbedding = await getQueryEmbedding(queryHash)
-    
+
     if (cachedEmbedding && cachedEmbedding.model_name === EMBED_MODEL) {
       console.log(`✅ [${requestId}] Using cached embedding (used ${cachedEmbedding.usage_count} times)`)
-      queryEmbedding = cachedEmbedding.embedding
+      queryEmbedding = normalizeEmbedding(cachedEmbedding.embedding)
       embeddingDuration = Date.now() - embedStartTime
-      
+
       // Find and log similar queries for analytics
       const similarQueries = await findSimilarQueries(queryEmbedding, 0.9, 3)
       if (similarQueries.length > 0) {
-        console.log(`🔍 [${requestId}] Found ${similarQueries.length} similar queries:`, 
-          similarQueries.map(q => ({ 
-            text: q.query_text.slice(0, 50) + '...', 
+        console.log(`🔍 [${requestId}] Found ${similarQueries.length} similar queries:`,
+          similarQueries.map(q => ({
+            text: q.query_text.slice(0, 50) + '...',
             similarity: q.similarity.toFixed(3),
-            usage: q.usage_count 
+            usage: q.usage_count
           }))
         )
       }
@@ -212,9 +249,9 @@ export async function POST(req: Request) {
         })
         embeddingDuration = Date.now() - embedStartTime
         console.log(`✅ [${requestId}] Embedding created in ${embeddingDuration}ms`)
-        
-        queryEmbedding = embedRes.data[0].embedding
-        
+
+        queryEmbedding = normalizeEmbedding(embedRes.data[0].embedding)
+
         // Cache the new embedding for future use (non-blocking)
         try {
           await saveQueryEmbedding({
@@ -227,8 +264,8 @@ export async function POST(req: Request) {
         } catch (cacheError) {
           console.error(`⚠️ [${requestId}] Failed to cache embedding, but continuing:`, cacheError)
         }
-        
-      } catch (error) {
+
+      } catch (error: any) {
         embeddingDuration = Date.now() - embedStartTime
         console.error(`❌ [${requestId}] OpenAI embedding failed:`, {
           error: error.message,
@@ -238,10 +275,10 @@ export async function POST(req: Request) {
           queryLength: query.length,
           duration: embeddingDuration
         })
-        
+
         errorMessage = `Failed to create embedding: ${error.message}`
         status = 'error'
-        
+
         // Log the error using supabaseAdmin (non-blocking)
         try {
           await logChatQuery({
@@ -256,10 +293,10 @@ export async function POST(req: Request) {
         } catch (logError) {
           console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
         }
-        
+
         return NextResponse.json(
-          { 
-            error: 'Failed to create embedding', 
+          {
+            error: 'Failed to create embedding',
             details: error.message,
             model: EMBED_MODEL,
             requestId,
@@ -269,22 +306,27 @@ export async function POST(req: Request) {
         )
       }
     }
+
+    // Safe debug prints on normalized arrays
     console.log(`🧪 [${requestId}] Embedding dimensions:`, queryEmbedding.length)
-    console.log(`🧪 [${requestId}] Embedding sample (first 5):`, queryEmbedding.slice(0, 5).map(v => v.toFixed(4)))
-    console.log(`🧪 [${requestId}] Embedding sample (middle 5):`, queryEmbedding.slice(250, 255).map(v => v.toFixed(4)))
-    console.log(`🧪 [${requestId}] Embedding sample (last 5):`, queryEmbedding.slice(-5).map(v => v.toFixed(4)))
+    try {
+      console.log(`🧪 [${requestId}] Embedding sample (first 5):`, queryEmbedding.slice(0, 5).map(v => Number(v).toFixed(4)))
+      console.log(`🧪 [${requestId}] Embedding sample (middle 5):`, queryEmbedding.slice(250, 255).map(v => Number(v).toFixed(4)))
+      console.log(`🧪 [${requestId}] Embedding sample (last 5):`, queryEmbedding.slice(-5).map(v => Number(v).toFixed(4)))
+    } catch {}
+
     console.log(`🧪 [${requestId}] Using model:`, EMBED_MODEL)
 
-    // Validate embedding dimensions match Supabase schema
+    // Validate embedding dimensions match Supabase schema (post-normalization)
     try {
       validateEmbeddingDimensions(queryEmbedding)
       console.log(`✅ [${requestId}] Embedding dimensions validated: ${queryEmbedding.length} matches vector(${EMBEDDING_DIMENSIONS})`)
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ [${requestId}] Embedding validation failed:`, error.message)
-      
+
       errorMessage = `Embedding validation failed: ${error.message}`
       status = 'error'
-      
+
       // Log the error using supabaseAdmin (non-blocking)
       try {
         await logChatQuery({
@@ -299,10 +341,10 @@ export async function POST(req: Request) {
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
       }
-      
+
       return NextResponse.json(
-        { 
-          error: 'Embedding validation failed', 
+        {
+          error: 'Embedding validation failed',
           details: error.message,
           expected: EMBEDDING_DIMENSIONS,
           actual: queryEmbedding.length,
@@ -315,27 +357,34 @@ export async function POST(req: Request) {
     }
 
     // Step 2: Search Supabase via RPC with proper parameter formatting
-    // Convert array to proper vector format for PostgreSQL
-    const vectorString = `[${queryEmbedding.join(',')}]`
-    
-    const rpcParams: any = {
+    // Convert array to proper vector format for PostgreSQL (vector literal)
+    const vectorString: string = `[${queryEmbedding.join(',')}]`
+
+    // Always send filter_type (null when empty) to force 4-arg RPC signature
+    const rpcParams: {
+      query_embedding: string
+      match_count: number
+      similarity_threshold: number
+      filter_type: string | null
+    } = {
       query_embedding: vectorString,
       match_count: 8,
-      similarity_threshold: 0.3  // Lower threshold to find more matches
+      similarity_threshold: 0.30, // similarity in [0..1]
+      filter_type: null
     }
 
-    // Add type filter only if provided
-    if (type && type.trim()) {
-      rpcParams.filter_type = type.trim()
-      console.log("🧪 Applying type filter:", type.trim())
+    if (type && String(type).trim()) {
+      rpcParams.filter_type = String(type).trim()
+      console.log("🧪 Applying type filter:", rpcParams.filter_type)
     } else {
-      console.log("🧪 No type filter applied")
+      console.log("🧪 No type filter applied (sending null)")
     }
 
-    console.log(`🧪 [${requestId}] RPC params:`, { 
-      ...rpcParams, 
+    console.log(`🧪 [${requestId}] RPC params:`, {
+      match_count: rpcParams.match_count,
+      similarity_threshold: rpcParams.similarity_threshold,
+      filter_type: rpcParams.filter_type ?? 'null',
       query_embedding: `[${queryEmbedding.length}D vector string]`,
-      filter_type: rpcParams.filter_type || 'none'
     })
 
     console.log(`🔄 [${requestId}] Calling Supabase match_embeddings RPC...`)
@@ -346,41 +395,44 @@ export async function POST(req: Request) {
 
     console.log(`🧪 [${requestId}] Raw RPC response - data:`, matches?.length || 0, 'matches')
     console.log(`🧪 [${requestId}] Raw RPC response - error:`, error)
+
+    // ---------- NEW: belt & suspenders post-filter ----------
+    const MIN_SIMILARITY = 0.30
+    const filteredMatches = (matches ?? []).filter((m: any) => (m?.similarity ?? 0) >= MIN_SIMILARITY)
+
     console.log(`🧪 [${requestId}] Match count breakdown:`, {
       total: matches?.length || 0,
-      withSimilarity: matches?.filter(m => m.similarity > 0).length || 0,
-      highSimilarity: matches?.filter(m => m.similarity > 0.5).length || 0,
-      mediumSimilarity: matches?.filter(m => m.similarity > 0.3 && m.similarity <= 0.5).length || 0,
-      lowSimilarity: matches?.filter(m => m.similarity <= 0.3).length || 0
+      kept: filteredMatches.length,
+      dropped_low_sim: (matches?.length || 0) - filteredMatches.length
     })
-    
+
     if (error) {
       console.error(`❌ [${requestId}] Supabase match_embeddings error:`, {
         error,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+        code: (error as any).code,
+        message: (error as any).message,
+        details: (error as any).details,
+        hint: (error as any).hint,
         rpcParams: { ...rpcParams, query_embedding: `[${queryEmbedding.length}D vector]` },
         duration: searchDuration
       })
-      
+
       // Try a simple query to test connection
       console.log(`🔄 [${requestId}] Testing database connection...`)
       const { data: testData, error: testError } = await supabase
         .from('embeddings')
         .select('id, source')
         .limit(1)
-      
+
       console.log(`🧪 [${requestId}] Connection test result:`, {
         hasData: !!testData?.length,
         dataCount: testData?.length || 0,
         testError: testError
       })
-      
-      errorMessage = `Supabase match_embeddings failed: ${error.message}`
+
+      errorMessage = `Supabase match_embeddings failed: ${(error as any).message}`
       status = 'error'
-      
+
       // Log the error using supabaseAdmin (non-blocking)
       try {
         await logChatQuery({
@@ -396,10 +448,10 @@ export async function POST(req: Request) {
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
       }
-      
+
       return NextResponse.json(
-        { 
-          error: 'Supabase match_embeddings failed', 
+        {
+          error: 'Supabase match_embeddings failed',
           details: error,
           rpcDuration: searchDuration,
           connectionTest: { hasData: !!testData?.length, error: testError },
@@ -409,39 +461,32 @@ export async function POST(req: Request) {
         { status: 500 }
       )
     }
-    
-    if (matches && matches.length > 0) {
-      console.log("🧪 Top match similarity:", matches[0].similarity?.toFixed(4))
-      console.log("🧪 All match similarities:", matches.map(m => m.similarity?.toFixed(4)))
-      console.log("🧪 Match sources:", matches.map(m => m.source))
-      console.log("🧪 Match types:", matches.map(m => m.metadata?.type || 'unknown'))
-      console.log("🧪 Sample match structure:", Object.keys(matches[0]))
-      console.log("🧪 Sample match content preview:", matches[0].content?.slice(0, 100) + '...')
-      console.log("🧪 Full sample match metadata:", {
-        id: matches[0].id,
-        source: matches[0].source,
-        similarity: matches[0].similarity,
-        metadata: matches[0].metadata,
-        contentLength: matches[0].content?.length
-      })
+
+    if (filteredMatches.length > 0) {
+      console.log("🧪 Top match similarity:", filteredMatches[0].similarity?.toFixed(4))
+      console.log("🧪 All kept similarities:", filteredMatches.map((m: any) => m.similarity?.toFixed(4)))
+      console.log("🧪 Match sources:", filteredMatches.map((m: any) => m.source))
+      console.log("🧪 Match types:", filteredMatches.map((m: any) => m.metadata?.type || 'unknown'))
+      console.log("🧪 Sample match structure:", Object.keys(filteredMatches[0]))
+      console.log("🧪 Sample match content preview:", (filteredMatches[0].content ?? '').slice(0, 100) + '...')
     } else {
       console.log("⚠️ No matches found - running diagnostics...")
-      
+
       // Debug: Check if embeddings table has any data
       const { data: allRows, error: countError } = await supabase
         .from('embeddings')
         .select('id, source, metadata')
         .limit(5)
-      
+
       console.log("🧪 Sample embeddings rows:", allRows)
       console.log("🧪 Available types in DB:", allRows?.map(r => r.metadata?.type).filter(Boolean))
       console.log("🧪 Count query error:", countError)
-      
+
       // If type filter was applied, try without it to see if that's the issue
       if (type) {
         console.log("🧪 Retrying without type filter to test...")
         const { data: unfiltered, error: unfilteredError } = await supabase.rpc('match_embeddings', {
-          query_embedding: queryEmbedding,
+          query_embedding: vectorString, // correct vector literal
           match_count: 3,
           similarity_threshold: 0.1
         })
@@ -451,13 +496,13 @@ export async function POST(req: Request) {
     }
 
     // Handle case where no matches are found
-    if (!matches || matches.length === 0) {
+    if (filteredMatches.length === 0) {
       console.log("⚠️ No matches found for query")
-      
+
       const noMatchResponse = "I couldn't find any relevant information in the knowledge base for your query."
       status = 'partial'
-      
-      // Log the partial result using supabaseAdmin (non-blocking)
+
+      // Existing lightweight analytics logs
       try {
         await logChatQuery({
           requestId,
@@ -474,7 +519,15 @@ export async function POST(req: Request) {
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log partial result, but continuing:`, logError)
       }
-      
+
+      // NEW: rag_logs (non-blocking, fire-and-forget)
+      logRagEventNonBlocking({
+        query,
+        queryEmbedding: toNumberArray512(queryEmbedding),
+        matches: [],
+        response: { response: noMatchResponse, sources: [] },
+      })
+
       return NextResponse.json({
         response: noMatchResponse,
         sources: []
@@ -482,25 +535,25 @@ export async function POST(req: Request) {
     }
 
     // Step 3: Generate context from matched chunks with source attribution
-    const context = matches.map((m: any, index: number) => 
+    const context = filteredMatches.map((m: any, index: number) =>
       `[Source ${index + 1}: ${m.source}]\n${m.content}`
     ).join('\n\n---\n\n')
     console.log("🧪 Context length:", context.length)
-    console.log("🧪 Context sources:", matches.map(m => m.source).join(', '))
+    console.log("🧪 Context sources:", filteredMatches.map((m: any) => m.source).join(', '))
 
     // Step 4: Generate a chat response
     console.log(`🔄 [${requestId}] Generating chat response...`)
     console.log(`🧪 [${requestId}] Using model:`, CHAT_MODEL)
     console.log(`🧪 [${requestId}] Context length:`, context.length)
-    
+
     const chatStartTime = Date.now()
     let chat
     try {
       chat = await openai.chat.completions.create({
         model: CHAT_MODEL,
         messages: [
-          { 
-            role: 'system', 
+          {
+            role: 'system',
             content: `You are a knowledge base assistant that MUST base all responses strictly on the provided context documents. You have NO knowledge outside of what is explicitly provided in the context.
 
 CRITICAL REQUIREMENTS:
@@ -517,16 +570,16 @@ RESPONSE FORMAT:
 - Use quotes from the context to support your points
 - End by noting any limitations in the available information
 
-Remember: You are a retrieval system, not a general AI assistant. Your value comes from accurately representing what's in the knowledge base, not from adding external knowledge.` 
+Remember: You are a retrieval system, not a general AI assistant. Your value comes from accurately representing what's in the knowledge base, not from adding external knowledge.`
           },
-          { 
-            role: 'user', 
+          {
+            role: 'user',
             content: `Question: ${query}
 
 Available context from knowledge base:
 ${context}
 
-Instructions: Answer the question using ONLY the information provided in the context above. If the context doesn't contain sufficient information to answer the question, clearly state this limitation. Always reference which source documents you're using.` 
+Instructions: Answer the question using ONLY the information provided in the context above. If the context doesn't contain sufficient information to answer the question, clearly state this limitation. Always reference which source documents you're using.`
           }
         ],
         temperature: 0.7,
@@ -534,7 +587,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       })
       chatDuration = Date.now() - chatStartTime
       console.log(`✅ [${requestId}] Chat response generated successfully in ${chatDuration}ms`)
-    } catch (error) {
+    } catch (error: any) {
       chatDuration = Date.now() - chatStartTime
       console.error(`❌ [${requestId}] OpenAI chat completion failed:`, {
         error: error.message,
@@ -544,17 +597,17 @@ Instructions: Answer the question using ONLY the information provided in the con
         contextLength: context.length,
         duration: chatDuration
       })
-      
+
       errorMessage = `Failed to generate response: ${error.message}`
       status = 'error'
-      
-      // Log the error using supabaseAdmin (non-blocking)
+
+      // Existing analytics logs
       try {
         await logChatQuery({
           requestId,
           query,
           queryType,
-          sources: matches.map((m: any) => ({
+          sources: filteredMatches.map((m: any) => ({
             source: m.source || 'unknown',
             similarity: m.similarity || 0,
             type: m.metadata?.type || m.type || 'unknown'
@@ -564,16 +617,16 @@ Instructions: Answer the question using ONLY the information provided in the con
           embeddingDuration,
           searchDuration,
           chatDuration,
-          matchCount: matches.length,
+          matchCount: filteredMatches.length,
           totalDuration: Date.now() - startTime
         })
       } catch (logError) {
         console.error(`⚠️ [${requestId}] Failed to log error, but continuing:`, logError)
       }
-      
+
       return NextResponse.json(
-        { 
-          error: 'Failed to generate response', 
+        {
+          error: 'Failed to generate response',
           details: error.message,
           model: CHAT_MODEL,
           contextLength: context.length,
@@ -585,19 +638,19 @@ Instructions: Answer the question using ONLY the information provided in the con
     }
 
     const generatedResponse = chat.choices[0].message.content
-    
+
     // Validate that response is grounded in context
     console.log(`🔍 [${requestId}] Validating response grounding...`)
-    const groundingValidation = validateResponseGrounding(generatedResponse, matches, query)
+    const groundingValidation = validateResponseGrounding(generatedResponse, filteredMatches, query)
     console.log(`🧪 [${requestId}] Grounding validation:`, groundingValidation)
-    
+
     const totalDuration = Date.now() - startTime
-    const sources = matches.map((m: any) => ({
+    const sources = filteredMatches.map((m: any) => ({
       source: m.source || 'unknown',
       similarity: m.similarity || 0,
       type: m.metadata?.type || m.type || 'unknown'
     }))
-    
+
     const responseData = {
       response: generatedResponse,
       sources,
@@ -605,7 +658,7 @@ Instructions: Answer the question using ONLY the information provided in the con
         requestId,
         timestamp: new Date().toISOString(),
         duration: totalDuration,
-        matchCount: matches.length,
+        matchCount: filteredMatches.length,
         grounding: groundingValidation,
         model: {
           embedding: EMBED_MODEL,
@@ -613,17 +666,14 @@ Instructions: Answer the question using ONLY the information provided in the con
         }
       }
     }
-    
+
     console.log(`🧪 [${requestId}] Final response data:`, {
       responseLength: responseData.response?.length || 0,
       sourceCount: responseData.sources.length,
       totalDuration
     })
-    
-    // Count direct quotes in response
-    const directQuotesCount = (generatedResponse.match(/["'].*?["']/g) || []).length
 
-    // Log response for analysis using supabaseAdmin (non-blocking, lightweight)
+    // Existing lightweight analytics logs
     try {
       await logResponse({
         requestId,
@@ -633,18 +683,17 @@ Instructions: Answer the question using ONLY the information provided in the con
         groundingScore: groundingValidation.score,
         hasSourceReferences: groundingValidation.hasSourceReferences,
         hasDirectQuotes: groundingValidation.hasDirectQuotes,
-        sourcesCited: matches.length
+        sourcesCited: filteredMatches.length
       })
     } catch (logError) {
       console.error(`⚠️ [${requestId}] Failed to log response, but continuing:`, logError)
     }
 
-    // Log matches for analysis using supabaseAdmin (non-blocking, lightweight)
     try {
       await logMatches({
         requestId,
         queryHash,
-        matches: matches.map((match: any, index: number) => ({
+        matches: filteredMatches.map((match: any, index: number) => ({
           embeddingId: match.id,
           source: match.source,
           similarity: match.similarity,
@@ -655,9 +704,8 @@ Instructions: Answer the question using ONLY the information provided in the con
       console.error(`⚠️ [${requestId}] Failed to log matches, but continuing:`, logError)
     }
 
-    // Log lightweight timestamps using supabaseAdmin (non-blocking)
+    // Lightweight timestamps
     const requestTimestamp = new Date(startTime)
-    
     try {
       await logTimestamp({
         entityType: 'rag_request',
@@ -669,7 +717,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       console.error(`⚠️ [${requestId}] Failed to log timestamp, but continuing:`, logError)
     }
 
-    // Log unified RAG request data using supabaseAdmin (non-blocking)
+    // Unified RAG request data
     try {
       await logRAGRequest({
         requestId,
@@ -682,7 +730,7 @@ Instructions: Answer the question using ONLY the information provided in the con
           duration: embeddingDuration,
           cached: !!cachedEmbedding
         },
-        matches: matches.slice(0, 5).map((match: any, index: number) => ({
+        matches: filteredMatches.slice(0, 5).map((match: any, index: number) => ({
           source: match.source,
           similarity: match.similarity,
           rank: index + 1
@@ -695,7 +743,7 @@ Instructions: Answer the question using ONLY the information provided in the con
           length: generatedResponse.length,
           hasSourceReferences: groundingValidation.hasSourceReferences,
           hasDirectQuotes: groundingValidation.hasDirectQuotes,
-          sourcesCited: matches.length
+          sourcesCited: filteredMatches.length
         },
         performance: {
           embeddingDuration,
@@ -710,7 +758,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       console.error(`⚠️ [${requestId}] Failed to log unified RAG request, but continuing:`, logError)
     }
 
-    // Log successful completion using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
+    // Existing success completion log
     try {
       await logChatQuery({
         requestId,
@@ -726,17 +774,25 @@ Instructions: Answer the question using ONLY the information provided in the con
         searchDuration,
         chatDuration,
         totalDuration,
-        matchCount: matches.length,
+        matchCount: filteredMatches.length,
         groundingScore: groundingValidation.score,
         status: 'success'
       })
     } catch (logError) {
       console.error(`⚠️ [${requestId}] Failed to log successful completion, but continuing:`, logError)
     }
-    
+
+    // NEW: rag_logs (non-blocking, fire-and-forget)
+    logRagEventNonBlocking({
+      query,
+      queryEmbedding: toNumberArray512(queryEmbedding),
+      matches: filteredMatches,
+      response: responseData,
+    })
+
     return NextResponse.json(responseData)
 
-  } catch (error) {
+  } catch (error: any) {
     const totalDuration = Date.now() - startTime
     console.error(`❌ [${requestId}] RAG endpoint error:`, {
       error: error.message,
@@ -744,14 +800,14 @@ Instructions: Answer the question using ONLY the information provided in the con
       duration: totalDuration,
       timestamp: new Date().toISOString()
     })
-    
-    // Log unified RAG request error using supabaseAdmin (non-blocking)
+
+    // Unified RAG request error (existing)
     try {
       await logRAGRequest({
         requestId,
         query: query || '[unknown]',
         queryType,
-        queryHash: queryHash || 'unknown',
+        queryHash: (typeof query === 'string' && query.trim()) ? createHash('sha256').update(query.trim().toLowerCase()).digest('hex') : 'unknown',
         performance: {
           embeddingDuration,
           searchDuration,
@@ -766,7 +822,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       console.error(`⚠️ [${requestId}] Failed to log unified RAG error, but continuing:`, logError)
     }
 
-    // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
+    // Existing unexpected error log
     try {
       await logChatQuery({
         requestId,
@@ -782,10 +838,20 @@ Instructions: Answer the question using ONLY the information provided in the con
     } catch (logError) {
       console.error(`⚠️ [${requestId}] Failed to log unexpected error, but continuing:`, logError)
     }
-    
+
+    // NEW: rag_logs (non-blocking, best-effort)
+    try {
+      logRagEventNonBlocking({
+        query: query || 'UNKNOWN',
+        queryEmbedding: new Array(512).fill(0),
+        matches: [],
+        response: { error: String(error?.message ?? error) },
+      })
+    } catch {}
+
     return NextResponse.json(
-      { 
-        error: 'Internal server error', 
+      {
+        error: 'Internal server error',
         details: error.message,
         requestId,
         timestamp: new Date().toISOString(),

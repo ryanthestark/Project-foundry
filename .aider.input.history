@@ -131,3 +131,231 @@
 
 # 2025-08-14 18:48:35.318407
 +## GOAL
+
+# 2025-08-14 19:06:06.561143
++You are auditing and fixing a Next.js + Supabase + OpenAI "Foundry" repo.
+
+# 2025-08-14 19:06:12.088335
++## GOAL
+
+# 2025-08-14 19:06:15.567332
++Fix end-to-end RAG functionality:
+
+# 2025-08-14 19:06:42.012075
++- `/api/chat/rag` should return context-based answers.
+
+# 2025-08-14 19:06:58.493161
++- Supabase `match_embeddings` RPC must run correctly with `vector(1536)` and metadata filtering.
+
+# 2025-08-14 19:07:27.069873
++- All ingestion docs must embed and query with compatible vector dimensions.
+
+# 2025-08-14 19:07:52.458524
++- RAG queries from the UI should return relevant context.
+
+# 2025-08-14 19:08:12.717054
++- Add debug logging and fix missing or malformed pieces.
+
+# 2025-08-14 19:08:59.994680
++## CONTEXT
+
+# 2025-08-14 19:09:11.159811
++Ingested files return 1536-dimensional embeddings.
+
+# 2025-08-14 19:09:19.234316
++Supabase RPC was previously set to 512-dimension vector.
+
+# 2025-08-14 19:09:32.001061
++API logs show: `matches = []` and sometimes 500 errors.
+
+# 2025-08-14 19:10:05.890472
++Frontend returns `"sources": []` or unexpected fallback messages.
+
+# 2025-08-14 19:10:46.843676
++## FIXES TO MAKE
+
+# 2025-08-14 19:10:57.662920
++- Align embedding model dimensions (1536) with Supabase schema.
+
+# 2025-08-14 19:11:15.107936
++- Fix SQL function `match_embeddings` to accept 1536-dim vectors.
+
+# 2025-08-14 19:11:52.423929
++- Verify metadata filtering via `filter_type`.
+
+# 2025-08-14 19:13:46.614427
++- Improve `/api/chat/rag` handler error handling and logging.
+
+# 2025-08-14 19:14:53.774843
++- Ensure ingest script embeds correctly and the chat returns matching context.
+
+# 2025-08-14 19:15:17.859048
++## REQUIRED FILES
+
+# 2025-08-14 19:15:33.986302
++/add tsconfig.json
+
+# 2025-08-14 19:15:34.019560
++/add package.json
+
+# 2025-08-14 19:15:34.054387
++/add .env.local
+
+# 2025-08-14 19:15:34.086053
++/add next.config.js
+
+# 2025-08-14 19:15:34.140485
++/add src/app/api/chat/rag/route.ts
+
+# 2025-08-14 19:15:34.190279
++/add src/scripts/ingest.ts
+
+# 2025-08-14 19:15:34.215957
++/add src/lib/openai.ts
+
+# 2025-08-14 19:15:34.252298
++/add src/lib/supabaseClient.ts
+
+# 2025-08-14 19:15:34.296862
++/add supabase/functions/match_embeddings.sql
+
+# 2025-08-14 19:17:02.927343
++You are validating that the full RAG chat pipeline works correctly in this Foundry repo.
+
+# 2025-08-14 19:18:25.064840
++## OBJECTIVE
+
+# 2025-08-14 19:18:31.541895
++Confirm the full RAG flow is functioning:
+
+# 2025-08-14 19:19:49.616043
++- Embedding generation
+
+# 2025-08-14 19:20:44.183936
++- Supabase RPC vector match
+
+# 2025-08-14 19:21:41.644950
++- Contextual response in /api/chat/rag
+
+# 2025-08-14 19:22:43.342343
++## VALIDATION STEPS
+
+# 2025-08-14 19:24:13.726775
++- `npm run ingest` should succeed without errors.
+
+# 2025-08-14 19:24:39.949145
++- A POST to `/api/chat/rag` with a real query (e.g. "Summarize the strategy documents") should return relevant matches and a helpful response.
+
+# 2025-08-14 19:25:46.315829
++- No RPC or dimension mismatch errors should occur.
+
+# 2025-08-14 19:27:09.280465
++- Log sample embedding slices and match count for debug.
+
+# 2025-08-14 19:27:40.176373
++## FILES TO REVIEW
+
+# 2025-08-14 19:28:11.653087
++/add src/app/api/chat/rag/route.ts
+
+# 2025-08-14 19:28:11.699098
++/add src/scripts/ingest.ts
+
+# 2025-08-14 19:28:11.740678
++/add supabase/functions/match_embeddings.sql
+
+# 2025-08-14 19:28:11.902608
++/add tsconfig.json
+
+# 2025-08-14 19:28:11.940605
++/add package.json
+
+# 2025-08-14 19:28:11.975282
++/add .env.local
+
+# 2025-08-14 19:28:12.056831
++## NON-NEGOTIABLES
+
+# 2025-08-14 19:28:32.515546
++- Embedding dimensions must match Supabase schema.
+
+# 2025-08-14 19:29:14.341133
++- Supabase RPC must return results.
+
+# 2025-08-14 19:30:23.229250
++- Chat responses must be grounded in context.
+
+# 2025-08-14 20:46:24.909658
++You are updating the Foundry codebase to support **full logging of RAG chat queries** into Supabase.
+
+# 2025-08-14 20:48:33.379629
++## GOAL
+
+# 2025-08-14 20:48:38.178969
++- Create a  table in Supabase to store:
+
+# 2025-08-14 20:48:42.647198
++  - query
+
+# 2025-08-14 20:48:48.839870
++  - query_embedding
+
+# 2025-08-14 20:50:27.378308
++  - matches
+
+# 2025-08-14 20:52:01.009285
++  - response
+
+# 2025-08-14 20:53:40.062839
++  - created_at timestamp
+
+# 2025-08-14 20:55:34.121489
++- Update `/api/chat/rag/route.ts` to:
+
+# 2025-08-14 20:55:42.351034
++  - Log each RAG request (query, embedding, matches, final response)
+
+# 2025-08-14 20:58:06.437487
++  - Use `supabaseAdmin` to write logs to DB
+
+# 2025-08-14 20:58:47.001755
++  - Make logging non-blocking (don't crash if it fails)
+
+# 2025-08-14 21:00:03.822729
++- Keep logging lightweight and JSON-friendly
+
+# 2025-08-14 21:01:40.177356
++## SCOPE
+
+# 2025-08-14 21:01:51.109204
++- Use existing Supabase schema (vector(512) for embedding)
+
+# 2025-08-14 21:02:48.609837
++- Matches should be inserted as JSONB
+
+# 2025-08-14 21:05:07.704535
++- Assume logging schema already exists or create it in `sql/create_rag_logs_table.sql`
+
+# 2025-08-14 21:06:45.310922
++- Add defensive error handling for logging step
+
+# 2025-08-14 21:08:23.241625
++- Do not alter the main RAG flow unless needed for logging
+
+# 2025-08-14 21:08:34.309077
++## FILES TO MODIFY OR ADD
+
+# 2025-08-14 21:08:42.186714
++/add src/app/api/chat/rag/route.ts
+
+# 2025-08-14 21:08:42.217747
++/add src/lib/supabaseAdmin.ts
+
+# 2025-08-14 21:08:42.250837
++/add sql/create_rag_logs_table.sql
+
+# 2025-08-14 21:15:14.375652
++You are updating the Foundry codebase to support **full logging of RAG chat queries** into Supabase.
+
+# 2025-08-14 21:15:18.309378
++## GOAL

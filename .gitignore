@@ -6,3 +6,4 @@ venv/
 .env*
 .aider*venv/
 .env.local
+.aider*
