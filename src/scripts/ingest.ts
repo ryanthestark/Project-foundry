@@ -27,6 +27,7 @@ async function embedText(text: string) {
   const response = await openai.embeddings.create({
     input: text,
     model: EMBED_MODEL,
+    dimensions: 512, // Force 512 dimensions for Supabase vector(512)
   })
   
   const embedding = response.data[0].embedding

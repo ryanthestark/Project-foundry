@@ -39,7 +39,8 @@ export async function POST(req: Request) {
     try {
       embedRes = await openai.embeddings.create({
         input: query,
-        model: EMBED_MODEL
+        model: EMBED_MODEL,
+        dimensions: 512, // Force 512 dimensions for Supabase vector(512)
       })
     } catch (error) {
       console.error("❌ OpenAI embedding failed:", error)
@@ -64,10 +65,10 @@ export async function POST(req: Request) {
     }
 
     // Step 2: Search Supabase via RPC with proper parameter formatting
-    const rpcParams = {
+    const rpcParams: any = {
       query_embedding: queryEmbedding,
       match_count: 8,
-      similarity_threshold: 0.4
+      similarity_threshold: 0.3  // Lower threshold to find more matches
     }
 
     // Add type filter only if provided
@@ -81,16 +82,30 @@ export async function POST(req: Request) {
     const { data: matches, error } = await supabase.rpc('match_embeddings', rpcParams)
 
     console.log("🧪 Matches returned:", matches?.length || 0)
-    if (matches && matches.length > 0) {
-      console.log("🧪 Top match similarity:", matches[0].similarity)
-      console.log("🧪 Match sources:", matches.map(m => m.source))
-    }
+    console.log("🧪 RPC error:", error)
+    
     if (error) {
       console.error("❌ Supabase match_embeddings error:", error)
+      console.error("❌ RPC params were:", { ...rpcParams, query_embedding: `[${queryEmbedding.length}D vector]` })
       return NextResponse.json(
         { error: 'Supabase match_embeddings failed', details: error },
         { status: 500 }
       )
+    }
+    
+    if (matches && matches.length > 0) {
+      console.log("🧪 Top match similarity:", matches[0].similarity)
+      console.log("🧪 Match sources:", matches.map(m => m.source))
+      console.log("🧪 Sample match:", matches[0])
+    } else {
+      console.log("⚠️ No matches found - checking if embeddings table has data")
+      
+      // Debug: Check if embeddings table has any data
+      const { data: count, error: countError } = await supabase
+        .from('embeddings')
+        .select('id', { count: 'exact', head: true })
+      
+      console.log("🧪 Embeddings table count:", count, "Error:", countError)
     }
 
     // Handle case where no matches are found
