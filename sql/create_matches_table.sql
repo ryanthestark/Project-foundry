@@ -78,7 +78,7 @@ BEGIN
     AVG(m.similarity)::FLOAT as avg_similarity,
     COUNT(CASE WHEN m.was_used_in_response THEN 1 END)::INTEGER as times_used
   FROM matches m
-  WHERE m.created_at >= NOW() - INTERVAL '%s days' % days_back
+  WHERE m.created_at >= NOW() - (days_back || ' days')::INTERVAL
   GROUP BY m.source
   ORDER BY match_count DESC, avg_similarity DESC
   LIMIT limit_count;
