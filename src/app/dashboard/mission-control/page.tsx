@@ -18,7 +18,7 @@ export default function MissionControl() {
 
     const endpoint = trimmed.startsWith('/mission')
       ? '/api/orchestrator/start'
-      : '/api/chat'
+      : '/api/chat/rag'
 
     const res = await fetch(endpoint, {
       method: 'POST',
