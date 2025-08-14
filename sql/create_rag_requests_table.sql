@@ -61,17 +61,17 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    COUNT(*)::INTEGER as total_requests,
-    COUNT(CASE WHEN r.status = 'success' THEN 1 END)::INTEGER as successful_requests,
-    COUNT(CASE WHEN r.status = 'error' THEN 1 END)::INTEGER as error_requests,
-    COUNT(CASE WHEN r.status = 'partial' THEN 1 END)::INTEGER as partial_requests,
-    AVG(r.total_duration_ms)::FLOAT as avg_total_duration,
-    AVG(r.embedding_duration_ms)::FLOAT as avg_embedding_duration,
-    AVG(r.search_duration_ms)::FLOAT as avg_search_duration,
-    AVG(r.chat_duration_ms)::FLOAT as avg_chat_duration,
-    AVG(r.grounding_score)::FLOAT as avg_grounding_score,
-    AVG(r.match_count)::FLOAT as avg_match_count,
-    (COUNT(CASE WHEN r.embedding_cached THEN 1 END)::FLOAT / GREATEST(COUNT(*), 1) * 100) as cached_embedding_rate
+    COALESCE(COUNT(*), 0)::INTEGER as total_requests,
+    COALESCE(COUNT(CASE WHEN r.status = 'success' THEN 1 END), 0)::INTEGER as successful_requests,
+    COALESCE(COUNT(CASE WHEN r.status = 'error' THEN 1 END), 0)::INTEGER as error_requests,
+    COALESCE(COUNT(CASE WHEN r.status = 'partial' THEN 1 END), 0)::INTEGER as partial_requests,
+    COALESCE(AVG(r.total_duration_ms), 0.0)::FLOAT as avg_total_duration,
+    COALESCE(AVG(r.embedding_duration_ms), 0.0)::FLOAT as avg_embedding_duration,
+    COALESCE(AVG(r.search_duration_ms), 0.0)::FLOAT as avg_search_duration,
+    COALESCE(AVG(r.chat_duration_ms), 0.0)::FLOAT as avg_chat_duration,
+    COALESCE(AVG(r.grounding_score), 0.0)::FLOAT as avg_grounding_score,
+    COALESCE(AVG(r.match_count), 0.0)::FLOAT as avg_match_count,
+    COALESCE((COUNT(CASE WHEN r.embedding_cached THEN 1 END)::FLOAT / GREATEST(COUNT(*), 1) * 100), 0.0) as cached_embedding_rate
   FROM rag_requests r
   WHERE r.created_at >= NOW() - (days_back * INTERVAL '1 day')
     AND (status_filter IS NULL OR r.status = status_filter);
