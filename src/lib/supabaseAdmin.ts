@@ -179,6 +179,124 @@ export async function getTopSources(limitCount: number = 10, daysBack: number = 
   }
 }
 
+// Utility functions for response logging and analysis
+export async function logResponse(responseData: {
+  requestId: string
+  queryHash: string
+  responseText: string
+  modelName: string
+  temperature?: number
+  maxTokens?: number
+  groundingScore?: number
+  hasSourceReferences?: boolean
+  hasDirectQuotes?: boolean
+  acknowledgesLimitations?: boolean
+  avoidsUngroundedClaims?: boolean
+  sourcesCited?: number
+  directQuotesCount?: number
+  metadata?: any
+}) {
+  try {
+    // Calculate response metrics
+    const { data: metrics, error: metricsError } = await supabaseAdmin.rpc('calculate_response_metrics', {
+      response_text_param: responseData.responseText
+    })
+
+    if (metricsError) {
+      console.error('Failed to calculate response metrics:', metricsError)
+    }
+
+    const responseMetrics = metrics?.[0] || {
+      word_count: 0,
+      sentence_count: 0,
+      avg_sentence_length: 0,
+      readability_score: 0
+    }
+
+    // Calculate overall quality score
+    let qualityScore = 0
+    if (responseData.hasSourceReferences) qualityScore += 25
+    if (responseData.hasDirectQuotes) qualityScore += 20
+    if (responseData.acknowledgesLimitations) qualityScore += 15
+    if (responseData.avoidsUngroundedClaims) qualityScore += 20
+    if (responseMetrics.readability_score) qualityScore += (responseMetrics.readability_score * 0.2)
+
+    const { error } = await supabaseAdmin
+      .from('responses')
+      .insert({
+        request_id: responseData.requestId,
+        query_hash: responseData.queryHash,
+        response_text: responseData.responseText,
+        response_length: responseData.responseText.length,
+        model_name: responseData.modelName,
+        temperature: responseData.temperature || null,
+        max_tokens: responseData.maxTokens || null,
+        grounding_score: responseData.groundingScore || null,
+        has_source_references: responseData.hasSourceReferences || false,
+        has_direct_quotes: responseData.hasDirectQuotes || false,
+        acknowledges_limitations: responseData.acknowledgesLimitations || false,
+        avoids_ungrounded_claims: responseData.avoidsUngroundedClaims || false,
+        response_quality_score: qualityScore,
+        word_count: responseMetrics.word_count,
+        sentence_count: responseMetrics.sentence_count,
+        avg_sentence_length: responseMetrics.avg_sentence_length,
+        readability_score: responseMetrics.readability_score,
+        sources_cited: responseData.sourcesCited || 0,
+        direct_quotes_count: responseData.directQuotesCount || 0,
+        metadata: responseData.metadata || null
+      })
+
+    if (error) {
+      console.error('Failed to log response:', error)
+      return false
+    }
+
+    console.log(`✅ Response logged successfully: ${responseData.requestId}`)
+    return true
+  } catch (error) {
+    console.error('Exception while logging response:', error)
+    return false
+  }
+}
+
+export async function getResponseQualityStats(daysBack: number = 30, modelFilter?: string) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_response_quality_stats', {
+      days_back: daysBack,
+      model_filter: modelFilter || null
+    })
+
+    if (error) {
+      console.error('Failed to get response quality stats:', error)
+      return null
+    }
+
+    return data?.[0] || null
+  } catch (error) {
+    console.error('Exception while getting response quality stats:', error)
+    return null
+  }
+}
+
+export async function getTopResponses(limitCount: number = 10, minGroundingScore: number = 70) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('get_top_responses', {
+      limit_count: limitCount,
+      min_grounding_score: minGroundingScore
+    })
+
+    if (error) {
+      console.error('Failed to get top responses:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Exception while getting top responses:', error)
+    return []
+  }
+}
+
 // Utility function for logging RAG chat queries
 export async function logChatQuery(logData: {
   requestId: string

@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches } from '@/lib/supabaseAdmin'
+import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 import { createHash } from 'crypto'
 
@@ -588,6 +588,30 @@ Instructions: Answer the question using ONLY the information provided in the con
       totalDuration
     })
     
+    // Count direct quotes in response
+    const directQuotesCount = (generatedResponse.match(/["'].*?["']/g) || []).length
+
+    // Log response for analysis
+    await logResponse({
+      requestId,
+      queryHash,
+      responseText: generatedResponse,
+      modelName: CHAT_MODEL,
+      temperature: 0.7,
+      maxTokens: 1000,
+      groundingScore: groundingValidation.score,
+      hasSourceReferences: groundingValidation.hasSourceReferences,
+      hasDirectQuotes: groundingValidation.hasDirectQuotes,
+      acknowledgesLimitations: groundingValidation.acknowledgesLimitations,
+      avoidsUngroundedClaims: groundingValidation.avoidsUngroundedClaims,
+      sourcesCited: matches.length,
+      directQuotesCount,
+      metadata: {
+        grounding: groundingValidation,
+        model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
+      }
+    })
+
     // Log matches for analysis
     await logMatches({
       requestId,
