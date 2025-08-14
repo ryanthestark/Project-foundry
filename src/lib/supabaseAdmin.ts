@@ -97,32 +97,32 @@ export async function findSimilarQueries(embedding: number[], threshold: number 
   }
 }
 
-// Utility functions for matches logging
+// Lightweight matches logging
 export async function logMatches(matchesData: {
   requestId: string
   queryHash: string
   matches: Array<{
     embeddingId?: string
     source: string
-    content: string
     similarity: number
     rankPosition: number
-    metadata?: any
-    wasUsedInResponse?: boolean
   }>
 }) {
   try {
-    const matchRecords = matchesData.matches.map((match, index) => ({
+    // Only log top 5 matches to keep it lightweight
+    const topMatches = matchesData.matches.slice(0, 5)
+    
+    const matchRecords = topMatches.map((match, index) => ({
       request_id: matchesData.requestId,
       query_hash: matchesData.queryHash,
       embedding_id: match.embeddingId || null,
       source: match.source,
-      content: match.content,
-      similarity: match.similarity,
+      content: `[Match ${index + 1}]`, // Don't store full content
+      similarity: Math.round(match.similarity * 1000) / 1000, // Round to 3 decimals
       rank_position: match.rankPosition || index + 1,
-      metadata: match.metadata || null,
-      content_length: match.content.length,
-      was_used_in_response: match.wasUsedInResponse || false
+      metadata: { rank: index + 1 }, // Minimal metadata
+      content_length: 0, // Don't calculate content length
+      was_used_in_response: true
     }))
 
     const { error } = await supabaseAdmin
@@ -134,7 +134,7 @@ export async function logMatches(matchesData: {
       return false
     }
 
-    console.log(`✅ Logged ${matchRecords.length} matches for request: ${matchesData.requestId}`)
+    console.log(`✅ Logged ${matchRecords.length} lightweight matches for request: ${matchesData.requestId}`)
     return true
   } catch (error) {
     console.error('Exception while logging matches:', error)
@@ -179,71 +179,50 @@ export async function getTopSources(limitCount: number = 10, daysBack: number = 
   }
 }
 
-// Utility functions for response logging and analysis
+// Lightweight response logging
 export async function logResponse(responseData: {
   requestId: string
   queryHash: string
   responseText: string
   modelName: string
-  temperature?: number
-  maxTokens?: number
   groundingScore?: number
   hasSourceReferences?: boolean
   hasDirectQuotes?: boolean
-  acknowledgesLimitations?: boolean
-  avoidsUngroundedClaims?: boolean
   sourcesCited?: number
-  directQuotesCount?: number
-  metadata?: any
 }) {
   try {
-    // Calculate response metrics
-    const { data: metrics, error: metricsError } = await supabaseAdmin.rpc('calculate_response_metrics', {
-      response_text_param: responseData.responseText
-    })
-
-    if (metricsError) {
-      console.error('Failed to calculate response metrics:', metricsError)
-    }
-
-    const responseMetrics = metrics?.[0] || {
-      word_count: 0,
-      sentence_count: 0,
-      avg_sentence_length: 0,
-      readability_score: 0
-    }
-
-    // Calculate overall quality score
+    // Simple word count without complex metrics
+    const wordCount = responseData.responseText.split(/\s+/).length
+    
+    // Simple quality score
     let qualityScore = 0
-    if (responseData.hasSourceReferences) qualityScore += 25
-    if (responseData.hasDirectQuotes) qualityScore += 20
-    if (responseData.acknowledgesLimitations) qualityScore += 15
-    if (responseData.avoidsUngroundedClaims) qualityScore += 20
-    if (responseMetrics.readability_score) qualityScore += (responseMetrics.readability_score * 0.2)
+    if (responseData.hasSourceReferences) qualityScore += 40
+    if (responseData.hasDirectQuotes) qualityScore += 30
+    if (responseData.groundingScore && responseData.groundingScore > 70) qualityScore += 30
 
     const { error } = await supabaseAdmin
       .from('responses')
       .insert({
         request_id: responseData.requestId,
         query_hash: responseData.queryHash,
-        response_text: responseData.responseText,
+        response_text: responseData.responseText.slice(0, 2000), // Truncate long responses
         response_length: responseData.responseText.length,
         model_name: responseData.modelName,
-        temperature: responseData.temperature || null,
-        max_tokens: responseData.maxTokens || null,
+        temperature: null, // Skip detailed model params
+        max_tokens: null,
         grounding_score: responseData.groundingScore || null,
         has_source_references: responseData.hasSourceReferences || false,
         has_direct_quotes: responseData.hasDirectQuotes || false,
-        acknowledges_limitations: responseData.acknowledgesLimitations || false,
-        avoids_ungrounded_claims: responseData.avoidsUngroundedClaims || false,
+        acknowledges_limitations: false, // Skip complex analysis
+        avoids_ungrounded_claims: false,
         response_quality_score: qualityScore,
-        word_count: responseMetrics.word_count,
-        sentence_count: responseMetrics.sentence_count,
-        avg_sentence_length: responseMetrics.avg_sentence_length,
-        readability_score: responseMetrics.readability_score,
+        word_count: wordCount,
+        sentence_count: null, // Skip sentence analysis
+        avg_sentence_length: null,
+        readability_score: null,
         sources_cited: responseData.sourcesCited || 0,
-        direct_quotes_count: responseData.directQuotesCount || 0,
-        metadata: responseData.metadata || null
+        direct_quotes_count: null, // Skip quote counting
+        metadata: { lightweight: true }
       })
 
     if (error) {
@@ -251,7 +230,7 @@ export async function logResponse(responseData: {
       return false
     }
 
-    console.log(`✅ Response logged successfully: ${responseData.requestId}`)
+    console.log(`✅ Lightweight response logged: ${responseData.requestId}`)
     return true
   } catch (error) {
     console.error('Exception while logging response:', error)
@@ -297,15 +276,11 @@ export async function getTopResponses(limitCount: number = 10, minGroundingScore
   }
 }
 
-// Utility functions for timestamp logging and analysis
+// Lightweight timestamp logging
 export async function logTimestamp(timestampData: {
   entityType: string
   entityId: string
   createdAt: Date | string
-  sourceTable?: string
-  metadata?: any
-  timezone?: string
-  createdBy?: string
   sessionId?: string
 }) {
   try {
@@ -315,10 +290,10 @@ export async function logTimestamp(timestampData: {
         entity_type: timestampData.entityType,
         entity_id: timestampData.entityId,
         created_at: timestampData.createdAt,
-        source_table: timestampData.sourceTable || null,
-        metadata: timestampData.metadata || null,
-        timezone: timestampData.timezone || 'UTC',
-        created_by: timestampData.createdBy || null,
+        source_table: null, // Skip source table tracking
+        metadata: null, // Skip metadata
+        timezone: 'UTC',
+        created_by: null,
         session_id: timestampData.sessionId || null
       })
 
@@ -327,7 +302,7 @@ export async function logTimestamp(timestampData: {
       return false
     }
 
-    console.log(`✅ Timestamp logged: ${timestampData.entityType}:${timestampData.entityId}`)
+    console.log(`✅ Lightweight timestamp logged: ${timestampData.entityType}`)
     return true
   } catch (error) {
     console.error('Exception while logging timestamp:', error)
@@ -393,35 +368,28 @@ export async function getRecentActivity(limitCount: number = 50, entityTypeFilte
   }
 }
 
-// Comprehensive RAG request logging
+// Lightweight RAG request logging
 export async function logRAGRequest(ragData: {
   requestId: string
   query: string
   queryType?: string
   queryHash: string
   embedding?: {
-    vector: number[]
     model: string
     dimensions: number
     duration: number
     cached: boolean
   }
   matches?: Array<{
-    id?: string
     source: string
-    content: string
     similarity: number
     rank: number
-    metadata?: any
   }>
   response?: {
-    text: string
     model: string
-    temperature: number
-    maxTokens: number
     duration: number
     groundingScore: number
-    qualityMetrics: any
+    length: number
   }
   performance: {
     embeddingDuration: number
@@ -433,14 +401,14 @@ export async function logRAGRequest(ragData: {
   errorMessage?: string
 }) {
   try {
-    console.log(`📊 [${ragData.requestId}] Logging comprehensive RAG request data...`)
+    console.log(`📊 [${ragData.requestId}] Logging lightweight RAG request...`)
     
-    // Log the main request entry
+    // Log the main request entry with minimal metadata
     const { error: requestError } = await supabaseAdmin
       .from('rag_requests')
       .insert({
         request_id: ragData.requestId,
-        query: ragData.query,
+        query: ragData.query.slice(0, 1000), // Truncate long queries
         query_type: ragData.queryType || null,
         query_hash: ragData.queryHash,
         embedding_model: ragData.embedding?.model || null,
@@ -448,27 +416,19 @@ export async function logRAGRequest(ragData: {
         embedding_cached: ragData.embedding?.cached || false,
         match_count: ragData.matches?.length || 0,
         response_model: ragData.response?.model || null,
-        response_length: ragData.response?.text?.length || 0,
+        response_length: ragData.response?.length || 0,
         grounding_score: ragData.response?.groundingScore || null,
         embedding_duration_ms: ragData.performance.embeddingDuration,
         search_duration_ms: ragData.performance.searchDuration,
         chat_duration_ms: ragData.performance.chatDuration,
         total_duration_ms: ragData.performance.totalDuration,
         status: ragData.status,
-        error_message: ragData.errorMessage || null,
+        error_message: ragData.errorMessage?.slice(0, 500) || null, // Truncate long errors
         metadata: {
-          embedding: ragData.embedding ? {
-            model: ragData.embedding.model,
-            dimensions: ragData.embedding.dimensions,
-            cached: ragData.embedding.cached
-          } : null,
-          response: ragData.response ? {
-            model: ragData.response.model,
-            temperature: ragData.response.temperature,
-            maxTokens: ragData.response.maxTokens,
-            qualityMetrics: ragData.response.qualityMetrics
-          } : null,
-          performance: ragData.performance
+          embedding_cached: ragData.embedding?.cached || false,
+          match_sources: ragData.matches?.slice(0, 3).map(m => m.source) || [], // Only top 3 sources
+          avg_similarity: ragData.matches?.length ? 
+            ragData.matches.reduce((sum, m) => sum + m.similarity, 0) / ragData.matches.length : 0
         }
       })
 

@@ -623,32 +623,23 @@ Instructions: Answer the question using ONLY the information provided in the con
     // Count direct quotes in response
     const directQuotesCount = (generatedResponse.match(/["'].*?["']/g) || []).length
 
-    // Log response for analysis using supabaseAdmin (non-blocking)
+    // Log response for analysis using supabaseAdmin (non-blocking, lightweight)
     try {
       await logResponse({
         requestId,
         queryHash,
         responseText: generatedResponse,
         modelName: CHAT_MODEL,
-        temperature: 0.7,
-        maxTokens: 1000,
         groundingScore: groundingValidation.score,
         hasSourceReferences: groundingValidation.hasSourceReferences,
         hasDirectQuotes: groundingValidation.hasDirectQuotes,
-        acknowledgesLimitations: groundingValidation.acknowledgesLimitations,
-        avoidsUngroundedClaims: groundingValidation.avoidsUngroundedClaims,
-        sourcesCited: matches.length,
-        directQuotesCount,
-        metadata: {
-          grounding: groundingValidation,
-          model: { embedding: EMBED_MODEL, chat: CHAT_MODEL }
-        }
+        sourcesCited: matches.length
       })
     } catch (logError) {
       console.error(`⚠️ [${requestId}] Failed to log response, but continuing:`, logError)
     }
 
-    // Log matches for analysis using supabaseAdmin (non-blocking)
+    // Log matches for analysis using supabaseAdmin (non-blocking, lightweight)
     try {
       await logMatches({
         requestId,
@@ -656,93 +647,29 @@ Instructions: Answer the question using ONLY the information provided in the con
         matches: matches.map((match: any, index: number) => ({
           embeddingId: match.id,
           source: match.source,
-          content: match.content,
           similarity: match.similarity,
-          rankPosition: index + 1,
-          metadata: match.metadata,
-          wasUsedInResponse: true // All matches in final response were used
+          rankPosition: index + 1
         }))
       })
     } catch (logError) {
       console.error(`⚠️ [${requestId}] Failed to log matches, but continuing:`, logError)
     }
 
-    // Log timestamps for all entities created in this request using supabaseAdmin (non-blocking)
+    // Log lightweight timestamps using supabaseAdmin (non-blocking)
     const requestTimestamp = new Date(startTime)
     
     try {
       await logTimestamp({
-        entityType: 'chat_query',
+        entityType: 'rag_request',
         entityId: requestId,
         createdAt: requestTimestamp,
-        sourceTable: 'chat_logs',
-        sessionId: requestId,
-        metadata: {
-          queryType,
-          queryLength: query.length,
-          matchCount: matches.length,
-          groundingScore: groundingValidation.score
-        }
+        sessionId: requestId
       })
     } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log chat_query timestamp, but continuing:`, logError)
+      console.error(`⚠️ [${requestId}] Failed to log timestamp, but continuing:`, logError)
     }
 
-    try {
-      await logTimestamp({
-        entityType: 'query_embedding',
-        entityId: queryHash,
-        createdAt: requestTimestamp,
-        sourceTable: 'query_embeddings',
-        sessionId: requestId,
-        metadata: {
-          model: EMBED_MODEL,
-          dimensions: EMBEDDING_DIMENSIONS,
-          cached: !!cachedEmbedding
-        }
-      })
-    } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log query_embedding timestamp, but continuing:`, logError)
-    }
-
-    try {
-      await logTimestamp({
-        entityType: 'response',
-        entityId: requestId,
-        createdAt: new Date(startTime + embeddingDuration + searchDuration + chatDuration),
-        sourceTable: 'responses',
-        sessionId: requestId,
-        metadata: {
-          model: CHAT_MODEL,
-          groundingScore: groundingValidation.score,
-          wordCount: (generatedResponse.match(/\S+/g) || []).length
-        }
-      })
-    } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log response timestamp, but continuing:`, logError)
-    }
-
-    // Log timestamps for each match (non-blocking)
-    for (let i = 0; i < matches.length; i++) {
-      try {
-        await logTimestamp({
-          entityType: 'match',
-          entityId: `${requestId}_match_${i + 1}`,
-          createdAt: new Date(startTime + embeddingDuration + searchDuration),
-          sourceTable: 'matches',
-          sessionId: requestId,
-          metadata: {
-            similarity: matches[i].similarity,
-            rankPosition: i + 1,
-            source: matches[i].source
-          }
-        })
-      } catch (logError) {
-        console.error(`⚠️ [${requestId}] Failed to log match ${i + 1} timestamp, but continuing:`, logError)
-      }
-    }
-
-    // Log comprehensive RAG request data using supabaseAdmin (non-blocking)
+    // Log lightweight RAG request data using supabaseAdmin (non-blocking)
     try {
       await logRAGRequest({
         requestId,
@@ -750,28 +677,21 @@ Instructions: Answer the question using ONLY the information provided in the con
         queryType,
         queryHash,
         embedding: {
-          vector: queryEmbedding,
           model: EMBED_MODEL,
           dimensions: EMBEDDING_DIMENSIONS,
           duration: embeddingDuration,
           cached: !!cachedEmbedding
         },
-        matches: matches.map((match: any, index: number) => ({
-          id: match.id,
+        matches: matches.slice(0, 3).map((match: any, index: number) => ({
           source: match.source,
-          content: match.content,
           similarity: match.similarity,
-          rank: index + 1,
-          metadata: match.metadata
+          rank: index + 1
         })),
         response: {
-          text: generatedResponse,
           model: CHAT_MODEL,
-          temperature: 0.7,
-          maxTokens: 1000,
           duration: chatDuration,
           groundingScore: groundingValidation.score,
-          qualityMetrics: groundingValidation
+          length: generatedResponse.length
         },
         performance: {
           embeddingDuration,
@@ -782,7 +702,7 @@ Instructions: Answer the question using ONLY the information provided in the con
         status: 'success'
       })
     } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log comprehensive RAG request, but continuing:`, logError)
+      console.error(`⚠️ [${requestId}] Failed to log lightweight RAG request, but continuing:`, logError)
     }
 
     // Log successful completion using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
@@ -820,7 +740,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       timestamp: new Date().toISOString()
     })
     
-    // Log comprehensive RAG request error using supabaseAdmin (non-blocking)
+    // Log lightweight RAG request error using supabaseAdmin (non-blocking)
     try {
       await logRAGRequest({
         requestId,
@@ -834,10 +754,10 @@ Instructions: Answer the question using ONLY the information provided in the con
           totalDuration
         },
         status: 'error',
-        errorMessage: `Internal server error: ${error.message}`
+        errorMessage: error.message
       })
     } catch (logError) {
-      console.error(`⚠️ [${requestId}] Failed to log comprehensive RAG error, but continuing:`, logError)
+      console.error(`⚠️ [${requestId}] Failed to log lightweight RAG error, but continuing:`, logError)
     }
 
     // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility) (non-blocking)
