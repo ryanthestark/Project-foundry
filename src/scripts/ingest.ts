@@ -4,18 +4,12 @@ import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
-import { OpenAI } from 'openai'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+import { openai, EMBED_MODEL } from '../lib/openai'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const EMBED_MODEL = 'text-embedding-3-small'
 
 function inferTypeFromFilename(filename: string): string {
   const normalized = filename.toLowerCase()
@@ -34,26 +28,40 @@ async function embedText(text: string) {
     input: text,
     model: EMBED_MODEL,
   })
-  return response.data[0].embedding
+  
+  const embedding = response.data[0].embedding
+  
+  // Ensure embedding is exactly 1536 dimensions for vector(1536)
+  if (embedding.length !== 1536) {
+    throw new Error(`Embedding dimension mismatch: expected 1536, got ${embedding.length}`)
+  }
+  
+  return embedding
 }
 
 async function ingestFile(filePath: string) {
-  const content = await fs.readFile(filePath, 'utf-8')
-  const filename = path.basename(filePath) // strips directories, just filename
-  const embedding = await embedText(content)
-  const type = inferTypeFromFilename(filename)
+  try {
+    const content = await fs.readFile(filePath, 'utf-8')
+    const filename = path.basename(filePath) // strips directories, just filename
+    const embedding = await embedText(content)
+    const type = inferTypeFromFilename(filename)
 
-  const { error } = await supabase.from('embeddings').insert({
-    content,
-    source: filename,
-    embedding,
-    metadata: { type },
-  })
+    console.log(`🔄 Processing ${filename} (${embedding.length} dimensions, type: ${type})`)
 
-  if (error) {
-    console.error(`❌ Failed to ingest ${filename}:`, error)
-  } else {
-    console.log(`✅ Ingested ${filename} as type: ${type}`)
+    const { error } = await supabase.from('embeddings').insert({
+      content,
+      source: filename,
+      embedding,
+      metadata: { type },
+    })
+
+    if (error) {
+      console.error(`❌ Failed to ingest ${filename}:`, error)
+    } else {
+      console.log(`✅ Ingested ${filename} as type: ${type}`)
+    }
+  } catch (error) {
+    console.error(`❌ Error processing ${path.basename(filePath)}:`, error.message)
   }
 }
 
