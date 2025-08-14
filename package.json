@@ -1,0 +1,30 @@
+{
+  "name": "project-foundry",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "runner": "node --loader ts-node/esm -r tsconfig-paths/register src/runner.ts",
+    "ingest": "ts-node -r tsconfig-paths/register src/scripts/ingest.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.55.0",
+    "next": "^15.4.6",
+    "openai": "^5.12.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.2"
+  }
+}
