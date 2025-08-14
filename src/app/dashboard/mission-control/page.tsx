@@ -13,6 +13,7 @@ export default function MissionControl() {
     const trimmed = input.trim()
     if (!trimmed) return
 
+    console.log("🔵 UI: Submitting query:", trimmed)
     setMessages(prev => [...prev, `🧑‍🚀: ${trimmed}`])
     setInput('')
 
@@ -20,13 +21,23 @@ export default function MissionControl() {
       ? '/api/orchestrator/start'
       : '/api/chat/rag'
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: trimmed }),
-    })
+    console.log("🔵 UI: Calling endpoint:", endpoint)
 
-    const data = await res.json()
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: trimmed }),
+      })
+
+      console.log("🔵 UI: Response status:", res.status)
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      console.log("🔵 UI: Response data:", data)
     
     // Format response based on endpoint
     let response = ''
@@ -45,7 +56,11 @@ export default function MissionControl() {
       }
     }
     
-    setMessages(prev => [...prev, response])
+      setMessages(prev => [...prev, response])
+    } catch (error) {
+      console.error("❌ UI: Request failed:", error)
+      setMessages(prev => [...prev, `❌ Error: ${error.message}`])
+    }
   }
 
   return (

@@ -65,16 +65,74 @@ async function ingestFile(filePath: string) {
   }
 }
 
-async function main() {
-  const dir = path.join(process.cwd(), 'docs')
-  const files = await fs.readdir(dir)
-
-  for (const file of files) {
-    const fullPath = path.join(dir, file)
-    await ingestFile(fullPath)
+async function validateEnvironment() {
+  const required = [
+    'OPENAI_API_KEY',
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY'
+  ]
+  
+  for (const env of required) {
+    if (!process.env[env]) {
+      throw new Error(`Missing required environment variable: ${env}`)
+    }
   }
+  
+  console.log("✅ Environment variables validated")
+}
 
-  console.log('🎉 All files ingested.')
+async function main() {
+  try {
+    console.log("🚀 Starting ingestion process...")
+    
+    // Validate environment
+    await validateEnvironment()
+    
+    const dir = path.join(process.cwd(), 'docs')
+    console.log(`📁 Reading directory: ${dir}`)
+    
+    let files
+    try {
+      files = await fs.readdir(dir)
+    } catch (error) {
+      throw new Error(`Failed to read docs directory: ${error.message}`)
+    }
+    
+    console.log(`📄 Found ${files.length} files to process`)
+    
+    let successCount = 0
+    let errorCount = 0
+    
+    for (const file of files) {
+      const fullPath = path.join(dir, file)
+      
+      // Check if it's a file (not directory)
+      try {
+        const stats = await fs.stat(fullPath)
+        if (!stats.isFile()) {
+          console.log(`⏭️ Skipping directory: ${file}`)
+          continue
+        }
+      } catch (error) {
+        console.error(`❌ Error checking file stats for ${file}:`, error.message)
+        errorCount++
+        continue
+      }
+      
+      try {
+        await ingestFile(fullPath)
+        successCount++
+      } catch (error) {
+        console.error(`❌ Failed to ingest ${file}:`, error.message)
+        errorCount++
+      }
+    }
+
+    console.log(`🎉 Ingestion complete! Success: ${successCount}, Errors: ${errorCount}`)
+  } catch (error) {
+    console.error("❌ Ingestion process failed:", error.message)
+    process.exit(1)
+  }
 }
 
 main().catch(console.error)
