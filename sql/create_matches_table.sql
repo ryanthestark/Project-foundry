@@ -46,12 +46,12 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    COUNT(*)::INTEGER as total_matches,
-    AVG(m.similarity)::FLOAT as avg_similarity,
-    MAX(m.similarity)::FLOAT as max_similarity,
-    MIN(m.similarity)::FLOAT as min_similarity,
-    COUNT(DISTINCT m.source)::INTEGER as unique_sources,
-    COUNT(CASE WHEN m.was_used_in_response THEN 1 END)::INTEGER as matches_used
+    COALESCE(COUNT(*), 0)::INTEGER as total_matches,
+    COALESCE(AVG(m.similarity), 0)::FLOAT as avg_similarity,
+    COALESCE(MAX(m.similarity), 0)::FLOAT as max_similarity,
+    COALESCE(MIN(m.similarity), 0)::FLOAT as min_similarity,
+    COALESCE(COUNT(DISTINCT m.source), 0)::INTEGER as unique_sources,
+    COALESCE(COUNT(CASE WHEN m.was_used_in_response THEN 1 END), 0)::INTEGER as matches_used
   FROM matches m
   WHERE m.request_id = request_id_param;
 END;
@@ -78,7 +78,7 @@ BEGIN
     AVG(m.similarity)::FLOAT as avg_similarity,
     COUNT(CASE WHEN m.was_used_in_response THEN 1 END)::INTEGER as times_used
   FROM matches m
-  WHERE m.created_at >= NOW() - (days_back || ' days')::INTERVAL
+  WHERE m.created_at >= NOW() - make_interval(days => days_back)
   GROUP BY m.source
   ORDER BY match_count DESC, avg_similarity DESC
   LIMIT limit_count;
