@@ -58,8 +58,8 @@ DECLARE
   avg_length FLOAT;
   readability FLOAT;
 BEGIN
-  -- Count words (simple split on whitespace)
-  words := COALESCE(array_length(string_to_array(trim(response_text_param), ' '), 1), 0);
+  -- Count words (simple split on whitespace, filter out empty strings)
+  words := COALESCE(array_length(array_remove(string_to_array(trim(response_text_param), ' '), ''), 1), 0);
   
   -- Count sentences (simple count of sentence endings)
   sentences := (length(response_text_param) - length(replace(replace(replace(response_text_param, '.', ''), '!', ''), '?', '')));
