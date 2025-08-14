@@ -13,9 +13,10 @@ async function testVectorMatch() {
   console.log('1️⃣ Testing RPC Function Existence...')
   try {
     const testVector = new Array(512).fill(0.1)
+    const testVectorString = `[${testVector.join(',')}]`
     const { data, error } = await supabaseAdmin
       .rpc('match_embeddings', {
-        query_embedding: testVector,
+        query_embedding: testVectorString,
         match_count: 1,
         similarity_threshold: 0.0
       })
