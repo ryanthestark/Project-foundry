@@ -21,12 +21,12 @@ BEGIN
     e.content,
     e.source,
     e.metadata,
-    (1 - (e.embedding <=> query_embedding::vector)) as similarity
+    (1 - (e.embedding <=> query_embedding)) as similarity
   FROM embeddings e
   WHERE 
-    (1 - (e.embedding <=> query_embedding::vector)) > similarity_threshold
+    (1 - (e.embedding <=> query_embedding)) > similarity_threshold
     AND (filter_type IS NULL OR e.metadata->>'type' = filter_type)
-  ORDER BY e.embedding <=> query_embedding::vector
+  ORDER BY e.embedding <=> query_embedding
   LIMIT match_count;
 END;
 $$;
