@@ -93,7 +93,9 @@ export async function POST(req: Request) {
 
     const queryEmbedding = embedRes.data[0].embedding
     console.log(`🧪 [${requestId}] Embedding dimensions:`, queryEmbedding.length)
-    console.log(`🧪 [${requestId}] Embedding sample:`, queryEmbedding.slice(0, 5))
+    console.log(`🧪 [${requestId}] Embedding sample (first 5):`, queryEmbedding.slice(0, 5).map(v => v.toFixed(4)))
+    console.log(`🧪 [${requestId}] Embedding sample (middle 5):`, queryEmbedding.slice(250, 255).map(v => v.toFixed(4)))
+    console.log(`🧪 [${requestId}] Embedding sample (last 5):`, queryEmbedding.slice(-5).map(v => v.toFixed(4)))
     console.log(`🧪 [${requestId}] Using model:`, EMBED_MODEL)
 
     // Ensure embedding is exactly 512 dimensions for vector(512)
@@ -148,6 +150,13 @@ export async function POST(req: Request) {
 
     console.log(`🧪 [${requestId}] Raw RPC response - data:`, matches?.length || 0, 'matches')
     console.log(`🧪 [${requestId}] Raw RPC response - error:`, error)
+    console.log(`🧪 [${requestId}] Match count breakdown:`, {
+      total: matches?.length || 0,
+      withSimilarity: matches?.filter(m => m.similarity > 0).length || 0,
+      highSimilarity: matches?.filter(m => m.similarity > 0.5).length || 0,
+      mediumSimilarity: matches?.filter(m => m.similarity > 0.3 && m.similarity <= 0.5).length || 0,
+      lowSimilarity: matches?.filter(m => m.similarity <= 0.3).length || 0
+    })
     
     if (error) {
       console.error(`❌ [${requestId}] Supabase match_embeddings error:`, {
@@ -187,11 +196,19 @@ export async function POST(req: Request) {
     }
     
     if (matches && matches.length > 0) {
-      console.log("🧪 Top match similarity:", matches[0].similarity)
+      console.log("🧪 Top match similarity:", matches[0].similarity?.toFixed(4))
+      console.log("🧪 All match similarities:", matches.map(m => m.similarity?.toFixed(4)))
       console.log("🧪 Match sources:", matches.map(m => m.source))
       console.log("🧪 Match types:", matches.map(m => m.metadata?.type || 'unknown'))
       console.log("🧪 Sample match structure:", Object.keys(matches[0]))
-      console.log("🧪 Full sample match:", matches[0])
+      console.log("🧪 Sample match content preview:", matches[0].content?.slice(0, 100) + '...')
+      console.log("🧪 Full sample match metadata:", {
+        id: matches[0].id,
+        source: matches[0].source,
+        similarity: matches[0].similarity,
+        metadata: matches[0].metadata,
+        contentLength: matches[0].content?.length
+      })
     } else {
       console.log("⚠️ No matches found - running diagnostics...")
       
