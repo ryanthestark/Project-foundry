@@ -43,19 +43,35 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  RETURN QUERY
-  SELECT 
-    t.entity_type,
-    COALESCE(COUNT(*), 0)::INTEGER as total_count,
-    MIN(t.created_at) as earliest_timestamp,
-    MAX(t.created_at) as latest_timestamp,
-    COALESCE((COUNT(*)::FLOAT / GREATEST(days_back, 1)), 0.0) as avg_per_day,
-    COALESCE(COUNT(DISTINCT t.session_id), 0)::INTEGER as unique_sessions
-  FROM timestamps t
-  WHERE t.created_at >= NOW() - (days_back * INTERVAL '1 day')
-    AND (entity_type_param IS NULL OR t.entity_type = entity_type_param)
-  GROUP BY t.entity_type
-  ORDER BY total_count DESC;
+  -- Handle case where entity_type_param is specified but no data exists
+  IF entity_type_param IS NOT NULL THEN
+    RETURN QUERY
+    SELECT 
+      COALESCE(t.entity_type, entity_type_param) as entity_type,
+      COALESCE(COUNT(*), 0)::INTEGER as total_count,
+      MIN(t.created_at) as earliest_timestamp,
+      MAX(t.created_at) as latest_timestamp,
+      COALESCE((COUNT(*)::FLOAT / GREATEST(days_back, 1)), 0.0) as avg_per_day,
+      COALESCE(COUNT(DISTINCT t.session_id), 0)::INTEGER as unique_sessions
+    FROM timestamps t
+    WHERE t.created_at >= NOW() - (days_back * INTERVAL '1 day')
+      AND t.entity_type = entity_type_param
+    GROUP BY t.entity_type
+    ORDER BY total_count DESC;
+  ELSE
+    RETURN QUERY
+    SELECT 
+      t.entity_type,
+      COALESCE(COUNT(*), 0)::INTEGER as total_count,
+      MIN(t.created_at) as earliest_timestamp,
+      MAX(t.created_at) as latest_timestamp,
+      COALESCE((COUNT(*)::FLOAT / GREATEST(days_back, 1)), 0.0) as avg_per_day,
+      COALESCE(COUNT(DISTINCT t.session_id), 0)::INTEGER as unique_sessions
+    FROM timestamps t
+    WHERE t.created_at >= NOW() - (days_back * INTERVAL '1 day')
+    GROUP BY t.entity_type
+    ORDER BY total_count DESC;
+  END IF;
 END;
 $$;
 
