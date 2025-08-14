@@ -23,11 +23,31 @@ export default function MissionControl() {
 
     console.log("🔵 UI: Calling endpoint:", endpoint)
 
+    // Parse query for type filter (e.g., "strategy: what is our plan?")
+    let query = trimmed
+    let type = undefined
+    
+    if (trimmed.includes(':') && !trimmed.startsWith('/mission')) {
+      const parts = trimmed.split(':', 2)
+      if (parts.length === 2) {
+        type = parts[0].trim()
+        query = parts[1].trim()
+        console.log("🔵 UI: Parsed type filter:", type)
+        console.log("🔵 UI: Parsed query:", query)
+      }
+    }
+
     try {
+      const requestBody = trimmed.startsWith('/mission') 
+        ? { query: trimmed }
+        : { query, type }
+        
+      console.log("🔵 UI: Request body:", requestBody)
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed }),
+        body: JSON.stringify(requestBody),
       })
 
       console.log("🔵 UI: Response status:", res.status)
@@ -87,7 +107,7 @@ export default function MissionControl() {
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Type /mission or a question..."
+          placeholder="Type /mission, 'strategy: question', or a question..."
           style={{ width: '80%', padding: 8 }}
         />
         <button type="submit" style={{ padding: '8px 12px', marginLeft: 8 }}>

@@ -30,8 +30,9 @@ export async function POST(req: Request) {
     }
 
     console.log("🧪 Incoming query:", query)
-    console.log("🧪 Query type:", type)
+    console.log("🧪 Query type filter:", type)
     console.log("🧪 Query length:", query.length)
+    console.log("🧪 Type filter enabled:", !!type)
 
     // Step 1: Embed query
     console.log("🔄 Creating embedding for query...")
@@ -72,11 +73,18 @@ export async function POST(req: Request) {
     }
 
     // Add type filter only if provided
-    if (type) {
-      rpcParams.filter_type = type
+    if (type && type.trim()) {
+      rpcParams.filter_type = type.trim()
+      console.log("🧪 Applying type filter:", type.trim())
+    } else {
+      console.log("🧪 No type filter applied")
     }
 
-    console.log("🧪 RPC params:", { ...rpcParams, query_embedding: `[${queryEmbedding.length}D vector]` })
+    console.log("🧪 RPC params:", { 
+      ...rpcParams, 
+      query_embedding: `[${queryEmbedding.length}D vector]`,
+      filter_type: rpcParams.filter_type || 'none'
+    })
 
     console.log("🔄 Calling Supabase match_embeddings RPC...")
     const { data: matches, error } = await supabase.rpc('match_embeddings', rpcParams)
@@ -106,6 +114,7 @@ export async function POST(req: Request) {
     if (matches && matches.length > 0) {
       console.log("🧪 Top match similarity:", matches[0].similarity)
       console.log("🧪 Match sources:", matches.map(m => m.source))
+      console.log("🧪 Match types:", matches.map(m => m.metadata?.type || 'unknown'))
       console.log("🧪 Sample match structure:", Object.keys(matches[0]))
       console.log("🧪 Full sample match:", matches[0])
     } else {
@@ -118,15 +127,20 @@ export async function POST(req: Request) {
         .limit(5)
       
       console.log("🧪 Sample embeddings rows:", allRows)
+      console.log("🧪 Available types in DB:", allRows?.map(r => r.metadata?.type).filter(Boolean))
       console.log("🧪 Count query error:", countError)
       
-      // Try a manual similarity search without RPC
-      const { data: manualTest, error: manualError } = await supabase
-        .from('embeddings')
-        .select('*')
-        .limit(1)
-      
-      console.log("🧪 Manual embeddings test:", manualTest?.length, "Error:", manualError)
+      // If type filter was applied, try without it to see if that's the issue
+      if (type) {
+        console.log("🧪 Retrying without type filter to test...")
+        const { data: unfiltered, error: unfilteredError } = await supabase.rpc('match_embeddings', {
+          query_embedding: queryEmbedding,
+          match_count: 3,
+          similarity_threshold: 0.1
+        })
+        console.log("🧪 Unfiltered matches:", unfiltered?.length || 0)
+        console.log("🧪 Unfiltered error:", unfilteredError)
+      }
     }
 
     // Handle case where no matches are found
