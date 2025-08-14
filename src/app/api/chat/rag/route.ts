@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp, logRAGRequest } from '@/lib/supabaseAdmin'
+import { supabaseAdmin, logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp, logRAGRequest } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 import { createHash } from 'crypto'
 
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       errorMessage = 'Query parameter is required and must be a string'
       status = 'error'
       
-      // Log the error
+      // Log the error using supabaseAdmin
       await logChatQuery({
         requestId,
         query: query || '[invalid]',
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
       errorMessage = `Query is too long (max 10000 characters): ${query.length}`
       status = 'error'
       
-      // Log the error
+      // Log the error using supabaseAdmin
       await logChatQuery({
         requestId,
         query: query.slice(0, 1000) + '...[truncated]',
@@ -230,7 +230,7 @@ export async function POST(req: Request) {
         errorMessage = `Failed to create embedding: ${error.message}`
         status = 'error'
         
-        // Log the error
+        // Log the error using supabaseAdmin
         await logChatQuery({
           requestId,
           query,
@@ -269,7 +269,7 @@ export async function POST(req: Request) {
       errorMessage = `Embedding validation failed: ${error.message}`
       status = 'error'
       
-      // Log the error
+      // Log the error using supabaseAdmin
       await logChatQuery({
         requestId,
         query,
@@ -361,7 +361,7 @@ export async function POST(req: Request) {
       errorMessage = `Supabase match_embeddings failed: ${error.message}`
       status = 'error'
       
-      // Log the error
+      // Log the error using supabaseAdmin
       await logChatQuery({
         requestId,
         query,
@@ -433,7 +433,7 @@ export async function POST(req: Request) {
       const noMatchResponse = "I couldn't find any relevant information in the knowledge base for your query."
       status = 'partial'
       
-      // Log the partial result
+      // Log the partial result using supabaseAdmin
       await logChatQuery({
         requestId,
         query,
@@ -520,7 +520,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       errorMessage = `Failed to generate response: ${error.message}`
       status = 'error'
       
-      // Log the error
+      // Log the error using supabaseAdmin
       await logChatQuery({
         requestId,
         query,
@@ -591,7 +591,7 @@ Instructions: Answer the question using ONLY the information provided in the con
     // Count direct quotes in response
     const directQuotesCount = (generatedResponse.match(/["'].*?["']/g) || []).length
 
-    // Log response for analysis
+    // Log response for analysis using supabaseAdmin
     await logResponse({
       requestId,
       queryHash,
@@ -612,7 +612,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       }
     })
 
-    // Log matches for analysis
+    // Log matches for analysis using supabaseAdmin
     await logMatches({
       requestId,
       queryHash,
@@ -627,7 +627,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       }))
     })
 
-    // Log timestamps for all entities created in this request
+    // Log timestamps for all entities created in this request using supabaseAdmin
     const requestTimestamp = new Date(startTime)
     
     await logTimestamp({
@@ -686,7 +686,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       })
     }
 
-    // Log comprehensive RAG request data
+    // Log comprehensive RAG request data using supabaseAdmin
     await logRAGRequest({
       requestId,
       query,
@@ -725,7 +725,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       status: 'success'
     })
 
-    // Log successful completion (keeping existing logging for compatibility)
+    // Log successful completion using supabaseAdmin (keeping existing logging for compatibility)
     await logChatQuery({
       requestId,
       query,
@@ -756,7 +756,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       timestamp: new Date().toISOString()
     })
     
-    // Log comprehensive RAG request error
+    // Log comprehensive RAG request error using supabaseAdmin
     await logRAGRequest({
       requestId,
       query: query || '[unknown]',
@@ -772,7 +772,7 @@ Instructions: Answer the question using ONLY the information provided in the con
       errorMessage: `Internal server error: ${error.message}`
     })
 
-    // Log the unexpected error (keeping existing logging for compatibility)
+    // Log the unexpected error using supabaseAdmin (keeping existing logging for compatibility)
     await logChatQuery({
       requestId,
       query: query || '[unknown]',
