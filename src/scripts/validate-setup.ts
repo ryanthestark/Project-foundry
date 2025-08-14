@@ -24,19 +24,76 @@ async function validateOpenAI() {
   console.log('🔍 Validating OpenAI Connection...')
   
   try {
+    // Test embedding generation
     const response = await openai.embeddings.create({
-      input: 'test',
+      input: 'test embedding for validation',
       model: EMBED_MODEL,
       dimensions: 512
     })
-    console.log(`✅ OpenAI Embeddings: ${EMBED_MODEL} (${response.data[0].embedding.length}D)`)
     
+    const embedding = response.data[0].embedding
+    
+    // Validate embedding properties
+    if (!Array.isArray(embedding)) {
+      throw new Error('Embedding is not an array')
+    }
+    
+    if (embedding.length !== 512) {
+      throw new Error(`Expected 512 dimensions, got ${embedding.length}`)
+    }
+    
+    // Check for valid numbers
+    const invalidValues = embedding.filter(val => typeof val !== 'number' || isNaN(val))
+    if (invalidValues.length > 0) {
+      throw new Error(`Found ${invalidValues.length} invalid values in embedding`)
+    }
+    
+    // Check magnitude (should be normalized)
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
+    
+    console.log(`✅ OpenAI Embeddings: ${EMBED_MODEL} (${embedding.length}D, magnitude: ${magnitude.toFixed(4)})`)
+    
+    // Test chat completion
     const chat = await openai.chat.completions.create({
       model: CHAT_MODEL,
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 10
     })
     console.log(`✅ OpenAI Chat: ${CHAT_MODEL}`)
+    
+    // Test embedding database compatibility
+    console.log('🔍 Testing embedding database compatibility...')
+    try {
+      const { data: testInsert, error: insertError } = await supabaseAdmin
+        .from('embeddings')
+        .insert({
+          content: 'test validation content',
+          source: 'validation_test.txt',
+          embedding: embedding,
+          metadata: { type: 'test', validation: true }
+        })
+        .select('id')
+        .single()
+      
+      if (insertError) {
+        throw new Error(`Database insert failed: ${insertError.message}`)
+      }
+      
+      console.log('✅ Embedding database compatibility: OK')
+      
+      // Clean up test record
+      if (testInsert?.id) {
+        await supabaseAdmin
+          .from('embeddings')
+          .delete()
+          .eq('id', testInsert.id)
+        console.log('✅ Test record cleaned up')
+      }
+      
+    } catch (dbError) {
+      console.warn(`⚠️ Database compatibility test failed: ${dbError.message}`)
+      console.log('💡 This might indicate a schema issue - check vector(512) type')
+    }
     
   } catch (error) {
     throw new Error(`❌ OpenAI Error: ${error.message}`)
