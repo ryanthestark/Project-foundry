@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp } from '@/lib/supabaseAdmin'
+import { logChatQuery, getQueryEmbedding, saveQueryEmbedding, findSimilarQueries, logMatches, logResponse, logTimestamp, logRAGRequest } from '@/lib/supabaseAdmin'
 import { openai, EMBED_MODEL, CHAT_MODEL, EMBEDDING_DIMENSIONS, validateEmbeddingDimensions } from '@/lib/openai'
 import { createHash } from 'crypto'
 
@@ -686,7 +686,46 @@ Instructions: Answer the question using ONLY the information provided in the con
       })
     }
 
-    // Log successful completion
+    // Log comprehensive RAG request data
+    await logRAGRequest({
+      requestId,
+      query,
+      queryType,
+      queryHash,
+      embedding: {
+        vector: queryEmbedding,
+        model: EMBED_MODEL,
+        dimensions: EMBEDDING_DIMENSIONS,
+        duration: embeddingDuration,
+        cached: !!cachedEmbedding
+      },
+      matches: matches.map((match: any, index: number) => ({
+        id: match.id,
+        source: match.source,
+        content: match.content,
+        similarity: match.similarity,
+        rank: index + 1,
+        metadata: match.metadata
+      })),
+      response: {
+        text: generatedResponse,
+        model: CHAT_MODEL,
+        temperature: 0.7,
+        maxTokens: 1000,
+        duration: chatDuration,
+        groundingScore: groundingValidation.score,
+        qualityMetrics: groundingValidation
+      },
+      performance: {
+        embeddingDuration,
+        searchDuration,
+        chatDuration,
+        totalDuration
+      },
+      status: 'success'
+    })
+
+    // Log successful completion (keeping existing logging for compatibility)
     await logChatQuery({
       requestId,
       query,
@@ -717,7 +756,23 @@ Instructions: Answer the question using ONLY the information provided in the con
       timestamp: new Date().toISOString()
     })
     
-    // Log the unexpected error
+    // Log comprehensive RAG request error
+    await logRAGRequest({
+      requestId,
+      query: query || '[unknown]',
+      queryType,
+      queryHash: queryHash || 'unknown',
+      performance: {
+        embeddingDuration,
+        searchDuration,
+        chatDuration,
+        totalDuration
+      },
+      status: 'error',
+      errorMessage: `Internal server error: ${error.message}`
+    })
+
+    // Log the unexpected error (keeping existing logging for compatibility)
     await logChatQuery({
       requestId,
       query: query || '[unknown]',

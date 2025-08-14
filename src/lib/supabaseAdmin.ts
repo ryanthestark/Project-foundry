@@ -393,6 +393,98 @@ export async function getRecentActivity(limitCount: number = 50, entityTypeFilte
   }
 }
 
+// Comprehensive RAG request logging
+export async function logRAGRequest(ragData: {
+  requestId: string
+  query: string
+  queryType?: string
+  queryHash: string
+  embedding?: {
+    vector: number[]
+    model: string
+    dimensions: number
+    duration: number
+    cached: boolean
+  }
+  matches?: Array<{
+    id?: string
+    source: string
+    content: string
+    similarity: number
+    rank: number
+    metadata?: any
+  }>
+  response?: {
+    text: string
+    model: string
+    temperature: number
+    maxTokens: number
+    duration: number
+    groundingScore: number
+    qualityMetrics: any
+  }
+  performance: {
+    embeddingDuration: number
+    searchDuration: number
+    chatDuration: number
+    totalDuration: number
+  }
+  status: 'success' | 'error' | 'partial'
+  errorMessage?: string
+}) {
+  try {
+    console.log(`📊 [${ragData.requestId}] Logging comprehensive RAG request data...`)
+    
+    // Log the main request entry
+    const { error: requestError } = await supabaseAdmin
+      .from('rag_requests')
+      .insert({
+        request_id: ragData.requestId,
+        query: ragData.query,
+        query_type: ragData.queryType || null,
+        query_hash: ragData.queryHash,
+        embedding_model: ragData.embedding?.model || null,
+        embedding_dimensions: ragData.embedding?.dimensions || null,
+        embedding_cached: ragData.embedding?.cached || false,
+        match_count: ragData.matches?.length || 0,
+        response_model: ragData.response?.model || null,
+        response_length: ragData.response?.text?.length || 0,
+        grounding_score: ragData.response?.groundingScore || null,
+        embedding_duration_ms: ragData.performance.embeddingDuration,
+        search_duration_ms: ragData.performance.searchDuration,
+        chat_duration_ms: ragData.performance.chatDuration,
+        total_duration_ms: ragData.performance.totalDuration,
+        status: ragData.status,
+        error_message: ragData.errorMessage || null,
+        metadata: {
+          embedding: ragData.embedding ? {
+            model: ragData.embedding.model,
+            dimensions: ragData.embedding.dimensions,
+            cached: ragData.embedding.cached
+          } : null,
+          response: ragData.response ? {
+            model: ragData.response.model,
+            temperature: ragData.response.temperature,
+            maxTokens: ragData.response.maxTokens,
+            qualityMetrics: ragData.response.qualityMetrics
+          } : null,
+          performance: ragData.performance
+        }
+      })
+
+    if (requestError) {
+      console.error('Failed to log RAG request:', requestError)
+      return false
+    }
+
+    console.log(`✅ [${ragData.requestId}] RAG request logged successfully`)
+    return true
+  } catch (error) {
+    console.error('Exception while logging RAG request:', error)
+    return false
+  }
+}
+
 // Utility function for logging RAG chat queries
 export async function logChatQuery(logData: {
   requestId: string
