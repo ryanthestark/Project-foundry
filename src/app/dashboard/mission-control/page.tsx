@@ -18,7 +18,7 @@ export default function MissionControl() {
 
     const endpoint = trimmed.startsWith('/mission')
       ? '/api/orchestrator/start'
-      : '/api/chat/rag'
+      : '/api/chat'
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -27,7 +27,17 @@ export default function MissionControl() {
     })
 
     const data = await res.json()
-    setMessages(prev => [...prev, `🤖: ${JSON.stringify(data, null, 2)}`])
+    
+    // Format response based on endpoint
+    let response = ''
+    if (trimmed.startsWith('/mission')) {
+      response = `🤖: ${JSON.stringify(data, null, 2)}`
+    } else {
+      // RAG response - show the actual response text
+      response = `🤖: ${data.response || JSON.stringify(data, null, 2)}`
+    }
+    
+    setMessages(prev => [...prev, response])
   }
 
   return (
