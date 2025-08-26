@@ -1,0 +1,12 @@
+{
+  "netflix": "Subscriptions",
+  "spotify": "Subscriptions",
+  "verizon": "Utilities",
+  "comcast": "Utilities",
+  "walmart": "Groceries",
+  "amazon": "Shopping",
+  "uber": "Transport",
+  "lyft": "Transport",
+  "mortgage": "Housing",
+  "rent": "Housing"
+}
